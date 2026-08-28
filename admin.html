@@ -502,6 +502,19 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
 function escapeAttr(str){ return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function flashSaved(row){ row.style.transition='background .3s'; row.style.background='#EAF6EE'; setTimeout(()=>{ row.style.background=''; }, 600); }
 
+// المتصفحات كثيرًا ما تفشل بصمت بتشغيل فيديو/صوت طويل مخزّن كنص Base64 كبير مباشرة.
+// نحوّله هنا لملف حقيقي بالذاكرة (Blob) أولًا، وهذا ما تتعامل معه المتصفحات بشكل موثوق مهما كبر حجمه.
+async function toPlayableUrl(dataUrl){
+  try{
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch(e){
+    console.error('تعذّر تحويل الملف لصيغة قابلة للتشغيل، سيُستخدم الرابط الأصلي:', e);
+    return dataUrl;
+  }
+}
+
 function showProgress(wrapId, barId, pct){
   const wrap = document.getElementById(wrapId), bar = document.getElementById(barId);
   wrap.classList.remove('hidden');
@@ -613,11 +626,14 @@ async function loadVideos(){
   const docs = await backend.listMemories('video');
   list.innerHTML = '';
   if(!docs.length){ list.innerHTML = '<div class="empty-hint">لم تُضَف فيديوهات بعد</div>'; return; }
-  docs.forEach((m) => {
+  list.innerHTML = '<div class="empty-hint">جارِ تجهيز المعاينات...</div>';
+  const withUrls = await Promise.all(docs.map(async m => ({ ...m, playUrl: await toPlayableUrl(m.url) })));
+  list.innerHTML = '';
+  withUrls.forEach((m) => {
     const row = document.createElement('div');
     row.className = 'item-row';
     row.innerHTML = `
-      <video class="item-thumb" src="${m.url}" muted></video>
+      <video class="item-thumb" src="${m.playUrl}" muted></video>
       <div class="item-body">
         <input type="text" placeholder="عنوان / تعليق" value="${m.caption?escapeAttr(m.caption):''}" data-field="caption">
         <input type="text" placeholder="التاريخ (اختياري)" value="${m.date?escapeAttr(m.date):''}" data-field="date">
@@ -670,7 +686,12 @@ async function loadSongs(){
         <button data-act="save" title="حفظ">💾</button>
         <button data-act="del" title="حذف">🗑️</button>
       </div>`;
-    row.querySelector('[data-act="play"]').addEventListener('click', () => { previewAudio.src = m.url; previewAudio.play().catch(()=>{}); });
+    const playBtn = row.querySelector('[data-act="play"]');
+    playBtn.addEventListener('click', async () => {
+      if(!m._playUrl){ playBtn.textContent = '...'; m._playUrl = await toPlayableUrl(m.url); playBtn.textContent = '▶'; }
+      previewAudio.src = m._playUrl;
+      previewAudio.play().catch(()=>{});
+    });
     row.querySelector('input[name="defaultSong"]').addEventListener('change', async () => { await backend.setDefaultSong(m.id); loadSongs(); });
     row.querySelector('[data-act="save"]').addEventListener('click', async () => { await backend.updateSong(m.id, { name: row.querySelector('[data-field="name"]').value }); flashSaved(row); });
     row.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteSong(m.id); loadSongs(); loadHome(); } });
