@@ -283,16 +283,24 @@ if(IS_FIREBASE_CONFIGURED){
         .sort((a,b) => (a.order||0) - (b.order||0));
     }
 
-    // قاعدة البيانات (Realtime Database) عندها حد أقصى ١٠ ميغابايت لكل قيمة نصية واحدة.
-    // الملفات الأكبر (فيديوهات، أغانٍ طويلة) نقسّمها لقطع أصغر قبل الحفظ، ونعيد تجميعها عند القراءة.
-    const CHUNK_LIMIT = 6 * 1024 * 1024; // ٦ ميغا حرف لكل قطعة (هامش أمان تحت حد الـ ١٠ ميغا)
+    // قاعدة البيانات (Realtime Database) عندها حد أقصى ١٠ ميغابايت لكل قيمة نصية،
+    // وكمان حد أقصى لحجم عملية الحفظ الواحدة إجمالًا. لهيك نقسّم الملفات الكبيرة
+    // لقطع صغيرة ونحفظ كل قطعة بعملية حفظ منفصلة، ونعيد تجميعها عند القراءة.
+    const CHUNK_LIMIT = 3 * 1024 * 1024; // ٣ ميغا حرف لكل قطعة (هامش أمان كبير)
 
-    function buildUrlPayload(dataUrl){
-      if(dataUrl.length <= CHUNK_LIMIT) return { url: dataUrl };
-      const urlChunks = {};
-      let count = 0;
-      for(let i=0;i<dataUrl.length;i+=CHUNK_LIMIT){ urlChunks[count] = dataUrl.slice(i, i+CHUNK_LIMIT); count++; }
-      return { chunked: true, chunkCount: count, urlChunks };
+    async function writeRecordWithUrl(ref, dataUrl, baseFields, onProgress){
+      if(dataUrl.length <= CHUNK_LIMIT){
+        await ref.set({ ...baseFields, url: dataUrl });
+        if(onProgress) onProgress(100);
+        return;
+      }
+      const chunks = [];
+      for(let i=0;i<dataUrl.length;i+=CHUNK_LIMIT) chunks.push(dataUrl.slice(i, i+CHUNK_LIMIT));
+      await ref.set({ ...baseFields, chunked:true, chunkCount: chunks.length });
+      for(let i=0;i<chunks.length;i++){
+        await ref.child('urlChunks/'+i).set(chunks[i]);
+        if(onProgress) onProgress(50 + ((i+1)/chunks.length)*50);
+      }
     }
 
     function resolveUrl(record){
@@ -319,12 +327,11 @@ if(IS_FIREBASE_CONFIGURED){
         return withResolvedUrl(objToSortedArray(snap.val(), type));
       },
       async addMemory(type, file, onProgress){
-        const dataUrl = await readFileAsDataURL(file, onProgress);
+        const dataUrl = await readFileAsDataURL(file, (pct) => { if(onProgress) onProgress(pct/2); });
         const existing = objToSortedArray((await db.ref('memories').once('value')).val(), type);
         const order = existing.length ? existing[existing.length-1].order + 1 : 0;
         const newRef = db.ref('memories').push();
-        const payload = buildUrlPayload(dataUrl);
-        await newRef.set({ type, ...payload, caption:'', date:'', order, createdAt: firebase.database.ServerValue.TIMESTAMP });
+        await writeRecordWithUrl(newRef, dataUrl, { type, caption:'', date:'', order, createdAt: firebase.database.ServerValue.TIMESTAMP }, onProgress);
       },
       async updateMemory(id, fields){ await db.ref('memories/'+id).update(fields); },
       async deleteMemory(id){ await db.ref('memories/'+id).remove(); },
@@ -344,12 +351,11 @@ if(IS_FIREBASE_CONFIGURED){
         return withResolvedUrl(objToSortedArray(snap.val()));
       },
       async addSong(file, onProgress){
-        const dataUrl = await readFileAsDataURL(file, onProgress);
+        const dataUrl = await readFileAsDataURL(file, (pct) => { if(onProgress) onProgress(pct/2); });
         const existing = objToSortedArray((await db.ref('songs').once('value')).val());
         const order = existing.length ? existing[existing.length-1].order + 1 : 0;
         const newRef = db.ref('songs').push();
-        const payload = buildUrlPayload(dataUrl);
-        await newRef.set({ name: file.name.replace(/\.[^/.]+$/,''), fileName: file.name, ...payload, isDefault: existing.length===0, order, createdAt: firebase.database.ServerValue.TIMESTAMP });
+        await writeRecordWithUrl(newRef, dataUrl, { name: file.name.replace(/\.[^/.]+$/,''), fileName: file.name, isDefault: existing.length===0, order, createdAt: firebase.database.ServerValue.TIMESTAMP }, onProgress);
       },
       async updateSong(id, fields){ await db.ref('songs/'+id).update(fields); },
       async deleteSong(id){ await db.ref('songs/'+id).remove(); },
