@@ -144,6 +144,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;}
   window.FIREBASE_CONFIG = {
     apiKey: "AIzaSyASafGbGKlU_uKhDhSsPxc6WSgkQCsSZ1o",
     authDomain: "sadkas-19b5e.firebaseapp.com",
+    databaseURL: "https://sadkas-19b5e-default-rtdb.firebaseio.com",
     projectId: "sadkas-19b5e",
     storageBucket: "sadkas-19b5e.firebasestorage.app",
     messagingSenderId: "907104429201",
@@ -151,13 +152,14 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;}
   };
 </script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
 <script>
 // ============================================================
 // طبقة البيانات: تعمل محليًا (localStorage) إن لم يتم إعداد Firebase،
-// وتتحول تلقائيًا لـ Firebase بمجرد وضع بيانات مشروعك الحقيقية أعلاه.
+// وتتحول تلقائيًا لـ Firebase Realtime Database بمجرد وضع بيانات مشروعك الحقيقية أعلاه.
+// (نستخدم Realtime Database بدل Storage لتفادي مشاكل CORS نهائيًا —
+// الصور والفيديوهات والأغاني تُحفظ كنص Base64 مباشرة داخل قاعدة البيانات)
 // ============================================================
 const IS_FIREBASE_CONFIGURED = window.FIREBASE_CONFIG.apiKey && !window.FIREBASE_CONFIG.apiKey.includes('PASTE_YOUR');
 
@@ -184,19 +186,27 @@ let FirebaseBackend = null;
 if(IS_FIREBASE_CONFIGURED){
   try{
     firebase.initializeApp(window.FIREBASE_CONFIG);
-    const db = firebase.firestore();
+    const db = firebase.database();
+
+    function objToSortedArray(obj, type){
+      return Object.entries(obj || {})
+        .map(([id, d]) => ({ id, ...d }))
+        .filter(m => !type || m.type === type)
+        .sort((a,b) => (a.order||0) - (b.order||0));
+    }
+
     FirebaseBackend = {
       async getSettings(){
-        const doc = await db.collection('settings').doc('gift').get();
-        return doc.exists ? doc.data() : null;
+        const snap = await db.ref('settings/gift').once('value');
+        return snap.val() || null;
       },
       async listMemories(type){
-        const snap = await db.collection('memories').where('type','==',type).orderBy('order','asc').get();
-        return snap.docs.map(d => d.data());
+        const snap = await db.ref('memories').once('value');
+        return objToSortedArray(snap.val(), type);
       },
       async listSongs(){
-        const snap = await db.collection('songs').orderBy('order','asc').get();
-        return snap.docs.map(d => d.data());
+        const snap = await db.ref('songs').once('value');
+        return objToSortedArray(snap.val());
       }
     };
   } catch(e){ console.error('Firebase init failed, falling back to local mode:', e); }
