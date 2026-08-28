@@ -170,6 +170,7 @@ button{font-family:inherit;cursor:pointer;}
   window.FIREBASE_CONFIG = {
     apiKey: "AIzaSyASafGbGKlU_uKhDhSsPxc6WSgkQCsSZ1o",
     authDomain: "sadkas-19b5e.firebaseapp.com",
+    databaseURL: "https://sadkas-19b5e-default-rtdb.firebaseio.com",
     projectId: "sadkas-19b5e",
     storageBucket: "sadkas-19b5e.firebasestorage.app",
     messagingSenderId: "907104429201",
@@ -177,8 +178,7 @@ button{font-family:inherit;cursor:pointer;}
   };
 </script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
 <script>
 // ============================================================
@@ -274,81 +274,64 @@ let FirebaseBackend = null;
 if(IS_FIREBASE_CONFIGURED){
   try{
     firebase.initializeApp(window.FIREBASE_CONFIG);
-    const db = firebase.firestore();
-    const storage = firebase.storage();
+    const db = firebase.database();
 
-    function uploadWithProgress(path, file, onProgress){
-      return new Promise((resolve, reject) => {
-        const ref = storage.ref().child(path);
-        const task = ref.put(file);
-        task.on('state_changed', (snap) => {
-          if(onProgress) onProgress((snap.bytesTransferred/snap.totalBytes)*100);
-        }, reject, async () => {
-          const url = await task.snapshot.ref.getDownloadURL();
-          resolve({ url, path });
-        });
-      });
+    function objToSortedArray(obj, type){
+      return Object.entries(obj || {})
+        .map(([id, d]) => ({ id, ...d }))
+        .filter(m => !type || m.type === type)
+        .sort((a,b) => (a.order||0) - (b.order||0));
     }
 
     FirebaseBackend = {
       mode: 'firebase',
-      async getSettings(){ const d = await db.collection('settings').doc('gift').get(); return d.exists ? d.data() : {}; },
-      async saveSettings(obj){ await db.collection('settings').doc('gift').set(obj, { merge:true }); },
-      async getAdminHash(){ const d = await db.collection('settings').doc('admin').get(); return d.exists ? d.data().passwordHash : null; },
-      async setAdminHash(hash){ await db.collection('settings').doc('admin').set({ passwordHash: hash }); },
+      async getSettings(){ const snap = await db.ref('settings/gift').once('value'); return snap.val() || {}; },
+      async saveSettings(obj){ await db.ref('settings/gift').update(obj); },
+      async getAdminHash(){ const snap = await db.ref('settings/admin/passwordHash').once('value'); return snap.val() || null; },
+      async setAdminHash(hash){ await db.ref('settings/admin').set({ passwordHash: hash }); },
       async listMemories(type){
-        const snap = await db.collection('memories').where('type','==',type).orderBy('order','asc').get();
-        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const snap = await db.ref('memories').once('value');
+        return objToSortedArray(snap.val(), type);
       },
       async addMemory(type, file, onProgress){
-        const path = `${type === 'image' ? 'images' : 'videos'}/${Date.now()}_${file.name}`;
-        const { url } = await uploadWithProgress(path, file, onProgress);
-        const existing = await db.collection('memories').where('type','==',type).orderBy('order','desc').limit(1).get();
-        const order = existing.empty ? 0 : existing.docs[0].data().order + 1;
-        await db.collection('memories').add({ type, url, storagePath: path, caption:'', date:'', order, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+        const url = await readFileAsDataURL(file, onProgress);
+        const existing = objToSortedArray((await db.ref('memories').once('value')).val(), type);
+        const order = existing.length ? existing[existing.length-1].order + 1 : 0;
+        const newRef = db.ref('memories').push();
+        await newRef.set({ type, url, caption:'', date:'', order, createdAt: firebase.database.ServerValue.TIMESTAMP });
       },
-      async updateMemory(id, fields){ await db.collection('memories').doc(id).update(fields); },
-      async deleteMemory(id){
-        const doc = await db.collection('memories').doc(id).get();
-        const d = doc.data();
-        if(d && d.storagePath){ try{ await storage.ref().child(d.storagePath).delete(); } catch(e){} }
-        await db.collection('memories').doc(id).delete();
-      },
+      async updateMemory(id, fields){ await db.ref('memories/'+id).update(fields); },
+      async deleteMemory(id){ await db.ref('memories/'+id).remove(); },
       async swapMemoryOrder(type, id, direction){
-        const snap = await db.collection('memories').where('type','==',type).orderBy('order','asc').get();
-        const docs = snap.docs;
-        const idx = docs.findIndex(d => d.id === id);
+        const list = objToSortedArray((await db.ref('memories').once('value')).val(), type);
+        const idx = list.findIndex(m => m.id === id);
         const otherIdx = idx + direction;
-        if(otherIdx < 0 || otherIdx >= docs.length) return;
-        const batch = db.batch();
-        batch.update(db.collection('memories').doc(docs[idx].id), { order: docs[otherIdx].data().order });
-        batch.update(db.collection('memories').doc(docs[otherIdx].id), { order: docs[idx].data().order });
-        await batch.commit();
+        if(otherIdx < 0 || otherIdx >= list.length) return;
+        const a = list[idx], b = list[otherIdx];
+        const updates = {};
+        updates['memories/'+a.id+'/order'] = b.order;
+        updates['memories/'+b.id+'/order'] = a.order;
+        await db.ref().update(updates);
       },
       async listSongs(){
-        const snap = await db.collection('songs').orderBy('order','asc').get();
-        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const snap = await db.ref('songs').once('value');
+        return objToSortedArray(snap.val());
       },
       async addSong(file, onProgress){
-        const path = `audio/${Date.now()}_${file.name}`;
-        const { url } = await uploadWithProgress(path, file, onProgress);
-        const existing = await db.collection('songs').orderBy('order','desc').limit(1).get();
-        const order = existing.empty ? 0 : existing.docs[0].data().order + 1;
-        const anySongs = await db.collection('songs').limit(1).get();
-        await db.collection('songs').add({ name: file.name.replace(/\.[^/.]+$/,''), fileName: file.name, url, storagePath: path, isDefault: anySongs.empty, order, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+        const url = await readFileAsDataURL(file, onProgress);
+        const existing = objToSortedArray((await db.ref('songs').once('value')).val());
+        const order = existing.length ? existing[existing.length-1].order + 1 : 0;
+        const newRef = db.ref('songs').push();
+        await newRef.set({ name: file.name.replace(/\.[^/.]+$/,''), fileName: file.name, url, isDefault: existing.length===0, order, createdAt: firebase.database.ServerValue.TIMESTAMP });
       },
-      async updateSong(id, fields){ await db.collection('songs').doc(id).update(fields); },
-      async deleteSong(id){
-        const doc = await db.collection('songs').doc(id).get();
-        const d = doc.data();
-        if(d && d.storagePath){ try{ await storage.ref().child(d.storagePath).delete(); } catch(e){} }
-        await db.collection('songs').doc(id).delete();
-      },
+      async updateSong(id, fields){ await db.ref('songs/'+id).update(fields); },
+      async deleteSong(id){ await db.ref('songs/'+id).remove(); },
       async setDefaultSong(id){
-        const snap = await db.collection('songs').get();
-        const batch = db.batch();
-        snap.docs.forEach(d => batch.update(db.collection('songs').doc(d.id), { isDefault: d.id === id }));
-        await batch.commit();
+        const snap = await db.ref('songs').once('value');
+        const val = snap.val() || {};
+        const updates = {};
+        Object.keys(val).forEach(sid => { updates['songs/'+sid+'/isDefault'] = (sid === id); });
+        await db.ref().update(updates);
       }
     };
   } catch(e){ console.error('Firebase init failed, falling back to local mode:', e); }
