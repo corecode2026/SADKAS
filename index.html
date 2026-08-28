@@ -195,6 +195,19 @@ if(IS_FIREBASE_CONFIGURED){
         .sort((a,b) => (a.order||0) - (b.order||0));
     }
 
+    // بعض الملفات الكبيرة (فيديوهات/أغانٍ) تُحفظ مقسّمة لقطع من لوحة التحكم — نعيد تجميعها هنا
+    function resolveUrl(record){
+      if(record.chunked && record.urlChunks){
+        let out = '';
+        for(let i=0;i<record.chunkCount;i++) out += (record.urlChunks[i] || '');
+        return out;
+      }
+      return record.url;
+    }
+    function withResolvedUrl(list){
+      return list.map(m => { const url = resolveUrl(m); const { urlChunks, ...rest } = m; return { ...rest, url }; });
+    }
+
     FirebaseBackend = {
       async getSettings(){
         const snap = await db.ref('settings/gift').once('value');
@@ -202,11 +215,11 @@ if(IS_FIREBASE_CONFIGURED){
       },
       async listMemories(type){
         const snap = await db.ref('memories').once('value');
-        return objToSortedArray(snap.val(), type);
+        return withResolvedUrl(objToSortedArray(snap.val(), type));
       },
       async listSongs(){
         const snap = await db.ref('songs').once('value');
-        return objToSortedArray(snap.val());
+        return withResolvedUrl(objToSortedArray(snap.val()));
       }
     };
   } catch(e){ console.error('Firebase init failed, falling back to local mode:', e); }
