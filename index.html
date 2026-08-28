@@ -23,6 +23,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;}
   *{animation-duration:.01ms !important;transition-duration:.01ms !important;}
   .message-scroll-viewport{height:auto !important;max-height:none !important;overflow:visible !important;mask-image:none !important;-webkit-mask-image:none !important;}
   #msgBody{position:static !important;transform:none !important;}
+  .petals-bg{display:none !important;}
 }
 
 #lock-screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:100;overflow:hidden;}
@@ -63,14 +64,23 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;}
   mask-image:linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%);
   cursor:pointer;}
 #msgBody{position:absolute;top:0;left:0;width:100%;font-size:18px;line-height:2.1;color:var(--ink);white-space:pre-wrap;}
-.scroll-hint{font-size:12px;color:var(--muted);margin-bottom:26px;opacity:.75;}
+.scroll-hint{position:relative;z-index:1;font-size:12px;color:var(--muted);margin-bottom:26px;opacity:.75;}
 .btn-next{background:var(--rose-deep);color:var(--white);padding:14px 38px;border-radius:999px;font-size:16px;font-weight:600;box-shadow:var(--shadow);transition:transform .2s var(--ease),box-shadow .2s var(--ease);}
 .btn-next:hover{transform:translateY(-2px);box-shadow:0 24px 55px -18px rgba(74,46,53,.45);}
-#page-memories h2{font-size:clamp(26px,5vw,36px);color:var(--rose-deep);margin-bottom:28px;}
-.slideshow{position:relative;width:100%;max-width:640px;aspect-ratio:4/3;margin:0 auto 18px;border-radius:var(--radius-lg);overflow:hidden;background:#2a1c1f;box-shadow:var(--shadow);cursor:pointer;}
+#page-memories{position:relative;overflow:hidden;}
+#page-memories h2{position:relative;z-index:1;font-size:clamp(26px,5vw,36px);color:var(--rose-deep);margin-bottom:28px;}
+.petals-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:0;}
+.petal-fall{position:absolute;top:-8%;border-radius:50% 0 50% 50%;opacity:0;animation:petalFall linear infinite;}
+@keyframes petalFall{
+  0%{transform:translate(0,0) rotate(0deg);opacity:0;}
+  8%{opacity:.75;}
+  92%{opacity:.75;}
+  100%{transform:translate(var(--drift,40px), 118vh) rotate(360deg);opacity:0;}
+}
+.slideshow{position:relative;z-index:1;width:100%;max-width:640px;aspect-ratio:4/3;margin:0 auto 18px;border-radius:var(--radius-lg);overflow:hidden;background:#2a1c1f;box-shadow:var(--shadow);cursor:pointer;}
 .slideshow img,.slideshow video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1s var(--ease);}
 .slideshow img.visible,.slideshow video.visible{opacity:1;}
-.slide-caption{min-height:40px;margin-bottom:8px;text-align:center;}
+.slide-caption{position:relative;z-index:1;min-height:40px;margin-bottom:8px;text-align:center;}
 .slide-caption .cap-text{font-size:15px;color:var(--ink);margin-bottom:3px;}
 .slide-caption .cap-date{font-size:12px;color:var(--muted);}
 .empty-note{color:var(--muted);font-size:15px;padding:30px;}
@@ -111,6 +121,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;}
   </section>
 
   <section id="page-memories" class="page">
+    <div class="petals-bg" id="petalsBg"></div>
     <h2>ذكرياتنا 🤍</h2>
     <div class="slideshow" id="slideshow">
       <img id="slideImage" class="hidden" alt="">
@@ -397,7 +408,32 @@ function startMessageScroll(){
 function goToMemories(){
   document.getElementById('page-message').classList.remove('active');
   document.getElementById('page-memories').classList.add('active');
+  spawnFallingPetals();
   startSlideshow();
+}
+
+function spawnFallingPetals(){
+  const bg = document.getElementById('petalsBg');
+  if(!bg || bg.dataset.spawned) return;
+  bg.dataset.spawned = '1';
+  const count = 16;
+  for(let i=0;i<count;i++){
+    const p = document.createElement('div');
+    p.className = 'petal-fall';
+    const size = 10 + Math.random()*9;
+    const left = Math.random()*100;
+    const duration = 9 + Math.random()*7;
+    const delay = -Math.random()*duration;
+    const drift = (Math.random()*100 - 50) + 'px';
+    p.style.left = left + '%';
+    p.style.width = size + 'px';
+    p.style.height = size + 'px';
+    p.style.animationDuration = duration + 's';
+    p.style.animationDelay = delay + 's';
+    p.style.setProperty('--drift', drift);
+    p.style.background = i % 2 === 0 ? 'var(--rose)' : 'var(--gold)';
+    bg.appendChild(p);
+  }
 }
 
 function escapeHtml(str){
