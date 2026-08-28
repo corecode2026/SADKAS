@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحة التحكم — الهدية</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=Cairo:wght@300;400;500;600;700&display=swap');
+:root{--bg:#FAF6F4;--panel:#FFFFFF;--ink:#3F2A2E;--muted:#8B6F73;--rose:#D88C9A;--rose-deep:#B5677A;--gold:#C9A876;--line:#EFE1DE;--danger:#C0554B;--radius:16px;}
+*{box-sizing:border-box;}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:'Cairo',sans-serif;direction:rtl;}
+h1,h2,h3{font-family:'Aref Ruqaa',serif;margin:0;}
+button{font-family:inherit;cursor:pointer;}
+.hidden{display:none !important;}
+.mode-banner{background:#FFF4E5;color:#8A5A1F;font-size:12.5px;padding:9px 16px;text-align:center;}
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#4A2E35,#8C5A63);padding:20px;}
+.login-card{background:var(--panel);border-radius:22px;padding:40px 34px;width:100%;max-width:360px;text-align:center;box-shadow:0 30px 60px -20px rgba(0,0,0,.4);}
+.login-card h1{font-size:26px;color:var(--rose-deep);margin-bottom:6px;}
+.login-card p{color:var(--muted);font-size:13px;margin-bottom:24px;}
+.login-card input{width:100%;padding:13px 16px;border-radius:12px;border:1px solid var(--line);font-size:15px;margin-bottom:14px;background:#FCF9F8;}
+.login-card input:focus{outline:2px solid var(--rose);border-color:transparent;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 22px;border-radius:12px;font-size:14px;font-weight:600;background:var(--rose-deep);color:#fff;transition:filter .15s,transform .15s;border:none;}
+.btn:hover{filter:brightness(1.06);transform:translateY(-1px);}
+.btn.secondary{background:#F1E4E1;color:var(--rose-deep);}
+.btn.block{width:100%;}
+.login-error{color:var(--danger);font-size:13px;min-height:18px;margin-bottom:6px;}
+#admin-shell{display:flex;min-height:100vh;}
+.sidebar{width:230px;background:#4A2E35;color:#fff;padding:26px 18px;display:flex;flex-direction:column;flex-shrink:0;}
+.sidebar h2{font-size:20px;margin-bottom:30px;color:#fff;}
+.sidebar h2 span{display:block;font-size:11px;font-family:'Cairo';color:rgba(255,255,255,.55);margin-top:4px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;color:rgba(255,255,255,.85);font-size:14px;margin-bottom:4px;text-align:right;background:transparent;width:100%;border:none;}
+.nav-item:hover{background:rgba(255,255,255,.08);}
+.nav-item.active{background:rgba(255,255,255,.16);color:#fff;}
+.sidebar .logout{margin-top:auto;color:rgba(255,255,255,.6);font-size:13px;background:none;border:none;}
+.main{flex:1;padding:34px 40px;max-width:980px;}
+.view{display:none;}
+.view.active{display:block;animation:fade .3s ease;}
+@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+.main h1{font-size:26px;color:var(--rose-deep);margin-bottom:26px;}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:30px;}
+.stat-card{background:var(--panel);border-radius:var(--radius);padding:20px;box-shadow:0 10px 26px -18px rgba(74,46,53,.35);}
+.stat-card .icon{font-size:22px;margin-bottom:8px;}
+.stat-card .label{font-size:13px;color:var(--muted);margin-bottom:4px;}
+.stat-card .value{font-size:20px;font-weight:700;}
+.quick-actions{display:flex;flex-wrap:wrap;gap:10px;}
+.panel{background:var(--panel);border-radius:var(--radius);padding:26px;box-shadow:0 10px 26px -18px rgba(74,46,53,.3);margin-bottom:22px;}
+.field{margin-bottom:18px;text-align:right;}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;}
+.field input,.field textarea{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);font-size:14px;background:#FCF9F8;font-family:inherit;}
+.field textarea{min-height:140px;resize:vertical;line-height:1.8;}
+.field input:focus,.field textarea:focus{outline:2px solid var(--rose);border-color:transparent;}
+.save-status{font-size:13px;color:#3F8F5C;margin-right:10px;opacity:0;transition:opacity .3s;}
+.save-status.show{opacity:1;}
+.upload-row{display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap;}
+.upload-row input[type=file]{font-size:13px;}
+.progress-bar{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:16px;}
+.progress-bar>div{height:100%;background:var(--rose);width:0%;transition:width .2s;}
+.item-list{display:flex;flex-direction:column;gap:12px;}
+.item-row{display:flex;align-items:center;gap:14px;background:#FCF9F8;border:1px solid var(--line);border-radius:12px;padding:10px 14px;}
+.item-thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;background:#eee;flex-shrink:0;}
+.item-thumb.video-thumb,.item-thumb.audio-thumb{display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--muted);}
+.item-body{flex:1;min-width:0;}
+.item-body input{width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--line);font-size:13px;margin-bottom:5px;background:#fff;}
+.item-meta{font-size:11.5px;color:var(--muted);}
+.item-actions{display:flex;gap:6px;align-items:center;flex-shrink:0;}
+.item-actions button{width:30px;height:30px;border-radius:8px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:13px;}
+.item-actions button:hover{background:#F4E9E7;}
+.default-radio{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
+.empty-hint{color:var(--muted);font-size:13.5px;padding:18px 4px;}
+@media (max-width:760px){#admin-shell{flex-direction:column;}.sidebar{width:100%;flex-direction:row;flex-wrap:wrap;padding:14px;}.sidebar h2{display:none;}.sidebar .logout{margin-top:0;}.main{padding:22px 16px;}}
+</style>
+</head>
+<body>
+
+<div class="mode-banner hidden" id="modeBanner"></div>
+
+<div id="login-screen">
+  <div class="login-card">
+    <h1 id="loginTitle">لوحة التحكم</h1>
+    <p id="loginSub">أدخل كلمة المرور للمتابعة</p>
+    <div class="login-error" id="loginError"></div>
+    <input type="password" id="loginPassword" placeholder="كلمة المرور" autocomplete="off">
+    <input type="password" id="loginPasswordConfirm" class="hidden" placeholder="تأكيد كلمة المرور">
+    <button class="btn block" id="loginBtn">دخول</button>
+  </div>
+</div>
+
+<div id="admin-shell" class="hidden">
+  <aside class="sidebar">
+    <h2>لوحة التحكم<span>موقع الهدية</span></h2>
+    <button class="nav-item active" data-view="home">🏠 الرئيسية</button>
+    <button class="nav-item" data-view="settings">📝 الإعدادات</button>
+    <button class="nav-item" data-view="images">📷 الصور</button>
+    <button class="nav-item" data-view="videos">🎥 الفيديوهات</button>
+    <button class="nav-item" data-view="songs">🎵 الأغاني</button>
+    <a class="nav-item" href="index.html" target="_blank" style="text-decoration:none;display:block;text-align:right;">👁️ معاينة الموقع</a>
+    <button class="logout" id="logoutBtn">تسجيل الخروج</button>
+  </aside>
+
+  <main class="main">
+    <div class="view active" id="view-home">
+      <h1>نظرة عامة</h1>
+      <div class="card-grid">
+        <div class="stat-card"><div class="icon">🔐</div><div class="label">كلمة مرور الهدية</div><div class="value" id="statPassword">••••</div></div>
+        <div class="stat-card"><div class="icon">📝</div><div class="label">الرسالة</div><div class="value" id="statMessage">—</div></div>
+        <div class="stat-card"><div class="icon">📷</div><div class="label">عدد الصور</div><div class="value" id="statImages">0</div></div>
+        <div class="stat-card"><div class="icon">🎥</div><div class="label">عدد الفيديوهات</div><div class="value" id="statVideos">0</div></div>
+        <div class="stat-card"><div class="icon">🎵</div><div class="label">عدد الأغاني</div><div class="value" id="statSongs">0</div></div>
+      </div>
+      <div class="quick-actions">
+        <button class="btn" data-view="settings">الإعدادات</button>
+        <button class="btn" data-view="images">الصور</button>
+        <button class="btn" data-view="videos">الفيديوهات</button>
+        <button class="btn" data-view="songs">الأغاني</button>
+        <a class="btn secondary" href="index.html" target="_blank" style="text-decoration:none;">معاينة الموقع</a>
+      </div>
+    </div>
+
+    <div class="view" id="view-settings">
+      <h1>الإعدادات</h1>
+      <div class="panel">
+        <div class="field"><label>كلمة مرور موقع الهدية (أرقام)</label><input type="text" id="fGiftPassword" inputmode="numeric" placeholder="مثال: 1402"></div>
+        <div class="field"><label>اسم الحبيبة / اسم الموقع (يظهر أعلى شاشة القفل)</label><input type="text" id="fCoupleName" placeholder="من أجلكِ"></div>
+        <div class="field"><label>عنوان الرسالة</label><input type="text" id="fMsgTitle" placeholder="إلى أجمل من عرفت"></div>
+        <div class="field"><label>نص الرسالة</label><textarea id="fMsgBody" placeholder="اكتب رسالتك هنا..."></textarea></div>
+        <div class="field"><label>نص زر التالي</label><input type="text" id="fBtnText" placeholder="التالي ❤️"></div>
+        <button class="btn" id="saveSettingsBtn">حفظ التغييرات</button>
+        <span class="save-status" id="settingsSaveStatus">تم الحفظ ✓</span>
+      </div>
+    </div>
+
+    <div class="view" id="view-images">
+      <h1>الصور</h1>
+      <div class="panel">
+        <div class="upload-row"><input type="file" id="imageInput" accept="image/*" multiple><button class="btn" id="uploadImagesBtn">+ إضافة صورة</button></div>
+        <div class="progress-bar hidden" id="imageProgressWrap"><div id="imageProgressBar"></div></div>
+        <div class="item-list" id="imagesList"></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-videos">
+      <h1>الفيديوهات</h1>
+      <div class="panel">
+        <div class="upload-row"><input type="file" id="videoInput" accept="video/*" multiple><button class="btn" id="uploadVideosBtn">+ إضافة فيديو</button></div>
+        <div class="progress-bar hidden" id="videoProgressWrap"><div id="videoProgressBar"></div></div>
+        <div class="item-list" id="videosList"></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-songs">
+      <h1>الأغاني</h1>
+      <div class="panel">
+        <div class="upload-row"><input type="file" id="songInput" accept="audio/mpeg,audio/*"><button class="btn" id="uploadSongBtn">+ إضافة أغنية</button></div>
+        <div class="progress-bar hidden" id="songProgressWrap"><div id="songProgressBar"></div></div>
+        <div class="item-list" id="songsList"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<audio id="previewAudio" class="hidden"></audio>
+
+<!-- ============================================================
+     إعدادات Firebase — عدّل القيم لربط الموقع بمشروعك
+     طالما القيم لم تُعدَّل، ستعمل اللوحة تلقائيًا بوضع معاينة محلي
+     (البيانات والملفات تُحفظ في هذا المتصفح فقط عبر localStorage —
+     مناسب للتجربة، والملفات الكبيرة قد لا تُحفظ. اربط Firebase لتخزين حقيقي)
+     ============================================================ -->
+<script>
+  window.FIREBASE_CONFIG = {
+    apiKey: "AIzaSyASafGbGKlU_uKhDhSsPxc6WSgkQCsSZ1o",
+    authDomain: "sadkas-19b5e.firebaseapp.com",
+    projectId: "sadkas-19b5e",
+    storageBucket: "sadkas-19b5e.firebasestorage.app",
+    messagingSenderId: "907104429201",
+    appId: "1:907104429201:web:0563629998ab086b4ecb30"
+  };
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+
+<script>
+// ============================================================
+// طبقة البيانات: محلي (localStorage) تلقائيًا، أو Firebase إن أُعدّ أعلاه
+// ============================================================
+const IS_FIREBASE_CONFIGURED = window.FIREBASE_CONFIG.apiKey && !window.FIREBASE_CONFIG.apiKey.includes('PASTE_YOUR');
+
+async function sha256(text){
+  const enc = new TextEncoder().encode(text);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function genId(){ return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
+
+const LS_KEYS = { settings:'gift_settings', adminHash:'gift_admin_hash', memories:'gift_memories', songs:'gift_songs' };
+function lsGet(key, fallback){ try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch(e){ return fallback; } }
+function lsSet(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+
+function readFileAsDataURL(file, onProgress){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onprogress = (e) => { if(e.lengthComputable && onProgress) onProgress((e.loaded/e.total)*100); };
+    reader.onload = () => { if(onProgress) onProgress(100); resolve(reader.result); };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+const LocalBackend = {
+  mode: 'local',
+  async getSettings(){ return lsGet(LS_KEYS.settings, {}); },
+  async saveSettings(obj){ lsSet(LS_KEYS.settings, obj); },
+  async getAdminHash(){ return lsGet(LS_KEYS.adminHash, null); },
+  async setAdminHash(hash){ lsSet(LS_KEYS.adminHash, hash); },
+  async listMemories(type){ return lsGet(LS_KEYS.memories, []).filter(m => m.type === type).sort((a,b)=>a.order-b.order); },
+  async addMemory(type, file, onProgress){
+    const url = await readFileAsDataURL(file, onProgress);
+    const all = lsGet(LS_KEYS.memories, []);
+    const sameType = all.filter(m => m.type === type);
+    const maxOrder = sameType.length ? Math.max(...sameType.map(m => m.order)) : -1;
+    all.push({ id: genId(), type, url, caption:'', date:'', order: maxOrder+1 });
+    try{ lsSet(LS_KEYS.memories, all); }
+    catch(e){ throw new Error('QUOTA'); }
+  },
+  async updateMemory(id, fields){
+    const all = lsGet(LS_KEYS.memories, []);
+    const idx = all.findIndex(m => m.id === id);
+    if(idx>-1){ all[idx] = { ...all[idx], ...fields }; lsSet(LS_KEYS.memories, all); }
+  },
+  async deleteMemory(id){
+    const all = lsGet(LS_KEYS.memories, []).filter(m => m.id !== id);
+    lsSet(LS_KEYS.memories, all);
+  },
+  async swapMemoryOrder(type, id, direction){
+    const all = lsGet(LS_KEYS.memories, []);
+    const sameType = all.filter(m => m.type === type).sort((a,b)=>a.order-b.order);
+    const idx = sameType.findIndex(m => m.id === id);
+    const otherIdx = idx + direction;
+    if(otherIdx < 0 || otherIdx >= sameType.length) return;
+    const a = sameType[idx], b = sameType[otherIdx];
+    const orderA = a.order, orderB = b.order;
+    const idxAll_a = all.findIndex(m => m.id === a.id);
+    const idxAll_b = all.findIndex(m => m.id === b.id);
+    all[idxAll_a].order = orderB;
+    all[idxAll_b].order = orderA;
+    lsSet(LS_KEYS.memories, all);
+  },
+  async listSongs(){ return lsGet(LS_KEYS.songs, []).sort((a,b)=>a.order-b.order); },
+  async addSong(file, onProgress){
+    const url = await readFileAsDataURL(file, onProgress);
+    const all = lsGet(LS_KEYS.songs, []);
+    const maxOrder = all.length ? Math.max(...all.map(s => s.order)) : -1;
+    all.push({ id: genId(), name: file.name.replace(/\.[^/.]+$/,''), fileName: file.name, url, isDefault: all.length===0, order: maxOrder+1 });
+    try{ lsSet(LS_KEYS.songs, all); }
+    catch(e){ throw new Error('QUOTA'); }
+  },
+  async updateSong(id, fields){
+    const all = lsGet(LS_KEYS.songs, []);
+    const idx = all.findIndex(s => s.id === id);
+    if(idx>-1){ all[idx] = { ...all[idx], ...fields }; lsSet(LS_KEYS.songs, all); }
+  },
+  async deleteSong(id){
+    const all = lsGet(LS_KEYS.songs, []).filter(s => s.id !== id);
+    lsSet(LS_KEYS.songs, all);
+  },
+  async setDefaultSong(id){
+    const all = lsGet(LS_KEYS.songs, []).map(s => ({ ...s, isDefault: s.id === id }));
+    lsSet(LS_KEYS.songs, all);
+  }
+};
+
+let FirebaseBackend = null;
+if(IS_FIREBASE_CONFIGURED){
+  try{
+    firebase.initializeApp(window.FIREBASE_CONFIG);
+    const db = firebase.firestore();
+    const storage = firebase.storage();
+
+    function uploadWithProgress(path, file, onProgress){
+      return new Promise((resolve, reject) => {
+        const ref = storage.ref().child(path);
+        const task = ref.put(file);
+        task.on('state_changed', (snap) => {
+          if(onProgress) onProgress((snap.bytesTransferred/snap.totalBytes)*100);
+        }, reject, async () => {
+          const url = await task.snapshot.ref.getDownloadURL();
+          resolve({ url, path });
+        });
+      });
+    }
+
+    FirebaseBackend = {
+      mode: 'firebase',
+      async getSettings(){ const d = await db.collection('settings').doc('gift').get(); return d.exists ? d.data() : {}; },
+      async saveSettings(obj){ await db.collection('settings').doc('gift').set(obj, { merge:true }); },
+      async getAdminHash(){ const d = await db.collection('settings').doc('admin').get(); return d.exists ? d.data().passwordHash : null; },
+      async setAdminHash(hash){ await db.collection('settings').doc('admin').set({ passwordHash: hash }); },
+      async listMemories(type){
+        const snap = await db.collection('memories').where('type','==',type).orderBy('order','asc').get();
+        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      },
+      async addMemory(type, file, onProgress){
+        const path = `${type === 'image' ? 'images' : 'videos'}/${Date.now()}_${file.name}`;
+        const { url } = await uploadWithProgress(path, file, onProgress);
+        const existing = await db.collection('memories').where('type','==',type).orderBy('order','desc').limit(1).get();
+        const order = existing.empty ? 0 : existing.docs[0].data().order + 1;
+        await db.collection('memories').add({ type, url, storagePath: path, caption:'', date:'', order, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      },
+      async updateMemory(id, fields){ await db.collection('memories').doc(id).update(fields); },
+      async deleteMemory(id){
+        const doc = await db.collection('memories').doc(id).get();
+        const d = doc.data();
+        if(d && d.storagePath){ try{ await storage.ref().child(d.storagePath).delete(); } catch(e){} }
+        await db.collection('memories').doc(id).delete();
+      },
+      async swapMemoryOrder(type, id, direction){
+        const snap = await db.collection('memories').where('type','==',type).orderBy('order','asc').get();
+        const docs = snap.docs;
+        const idx = docs.findIndex(d => d.id === id);
+        const otherIdx = idx + direction;
+        if(otherIdx < 0 || otherIdx >= docs.length) return;
+        const batch = db.batch();
+        batch.update(db.collection('memories').doc(docs[idx].id), { order: docs[otherIdx].data().order });
+        batch.update(db.collection('memories').doc(docs[otherIdx].id), { order: docs[idx].data().order });
+        await batch.commit();
+      },
+      async listSongs(){
+        const snap = await db.collection('songs').orderBy('order','asc').get();
+        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      },
+      async addSong(file, onProgress){
+        const path = `audio/${Date.now()}_${file.name}`;
+        const { url } = await uploadWithProgress(path, file, onProgress);
+        const existing = await db.collection('songs').orderBy('order','desc').limit(1).get();
+        const order = existing.empty ? 0 : existing.docs[0].data().order + 1;
+        const anySongs = await db.collection('songs').limit(1).get();
+        await db.collection('songs').add({ name: file.name.replace(/\.[^/.]+$/,''), fileName: file.name, url, storagePath: path, isDefault: anySongs.empty, order, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      },
+      async updateSong(id, fields){ await db.collection('songs').doc(id).update(fields); },
+      async deleteSong(id){
+        const doc = await db.collection('songs').doc(id).get();
+        const d = doc.data();
+        if(d && d.storagePath){ try{ await storage.ref().child(d.storagePath).delete(); } catch(e){} }
+        await db.collection('songs').doc(id).delete();
+      },
+      async setDefaultSong(id){
+        const snap = await db.collection('songs').get();
+        const batch = db.batch();
+        snap.docs.forEach(d => batch.update(db.collection('songs').doc(d.id), { isDefault: d.id === id }));
+        await batch.commit();
+      }
+    };
+  } catch(e){ console.error('Firebase init failed, falling back to local mode:', e); }
+}
+
+const backend = FirebaseBackend || LocalBackend;
+
+const modeBanner = document.getElementById('modeBanner');
+if(!FirebaseBackend){
+  modeBanner.textContent = '⚠️ وضع معاينة محلي: البيانات والملفات محفوظة في هذا المتصفح فقط، ولن تظهر لغيرك. اربط Firebase (بالأعلى في الكود) لتخزين حقيقي متزامن بين اللوحة والموقع.';
+  modeBanner.classList.remove('hidden');
+}
+
+// ============================================================
+// تسجيل الدخول
+// ============================================================
+const SESSION_KEY = 'gift_admin_authed';
+const loginScreen = document.getElementById('login-screen');
+const adminShell = document.getElementById('admin-shell');
+const loginPassword = document.getElementById('loginPassword');
+const loginPasswordConfirm = document.getElementById('loginPasswordConfirm');
+const loginError = document.getElementById('loginError');
+const loginTitle = document.getElementById('loginTitle');
+const loginSub = document.getElementById('loginSub');
+const loginBtn = document.getElementById('loginBtn');
+
+let adminHash = null;
+let isFirstRun = false;
+
+async function initLogin(){
+  adminHash = await backend.getAdminHash();
+  if(adminHash){
+    isFirstRun = false;
+    loginTitle.textContent = 'لوحة التحكم';
+    loginSub.textContent = 'أدخل كلمة المرور للمتابعة';
+  } else {
+    isFirstRun = true;
+    loginTitle.textContent = 'مرحبًا بك 👋';
+    loginSub.textContent = 'قم بتعيين كلمة مرور للوحة التحكم لأول مرة';
+    loginPasswordConfirm.classList.remove('hidden');
+  }
+  if(sessionStorage.getItem(SESSION_KEY) === '1') showShell();
+}
+
+loginBtn.addEventListener('click', handleLoginSubmit);
+loginPassword.addEventListener('keydown', e => { if(e.key === 'Enter' && !isFirstRun) handleLoginSubmit(); });
+
+async function handleLoginSubmit(){
+  const pw = loginPassword.value.trim();
+  if(!pw){ loginError.textContent = 'يرجى إدخال كلمة المرور'; return; }
+  if(isFirstRun){
+    const confirmPw = loginPasswordConfirm.value.trim();
+    if(pw.length < 4){ loginError.textContent = 'كلمة المرور قصيرة جدًا (٤ أحرف على الأقل)'; return; }
+    if(pw !== confirmPw){ loginError.textContent = 'كلمتا المرور غير متطابقتين'; return; }
+    const hash = await sha256(pw);
+    await backend.setAdminHash(hash);
+    sessionStorage.setItem(SESSION_KEY, '1');
+    showShell();
+    return;
+  }
+  const hash = await sha256(pw);
+  if(hash === adminHash){
+    loginError.textContent = '';
+    sessionStorage.setItem(SESSION_KEY, '1');
+    showShell();
+  } else {
+    loginError.textContent = 'كلمة المرور غير صحيحة';
+  }
+}
+
+document.getElementById('logoutBtn').addEventListener('click', () => { sessionStorage.removeItem(SESSION_KEY); location.reload(); });
+
+function showShell(){
+  loginScreen.classList.add('hidden');
+  adminShell.classList.remove('hidden');
+  loadHome(); loadSettingsForm(); loadImages(); loadVideos(); loadSongs();
+}
+
+// ---------------- Navigation ----------------
+document.querySelectorAll('[data-view]').forEach(el => {
+  el.addEventListener('click', (e) => {
+    e.preventDefault();
+    const view = el.getAttribute('data-view');
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + view).classList.add('active');
+    document.querySelectorAll('.nav-item[data-view]').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll(`.nav-item[data-view="${view}"]`).forEach(n => n.classList.add('active'));
+  });
+});
+
+// ---------------- Home ----------------
+async function loadHome(){
+  const s = await backend.getSettings() || {};
+  document.getElementById('statPassword').textContent = s.password ? '•'.repeat(s.password.length) : 'غير محددة';
+  document.getElementById('statMessage').textContent = s.message ? (s.message.slice(0,18) + (s.message.length>18?'…':'')) : 'غير مكتوبة';
+  const [imgs, vids, songs] = await Promise.all([backend.listMemories('image'), backend.listMemories('video'), backend.listSongs()]);
+  document.getElementById('statImages').textContent = imgs.length;
+  document.getElementById('statVideos').textContent = vids.length;
+  document.getElementById('statSongs').textContent = songs.length;
+}
+
+// ---------------- Settings ----------------
+async function loadSettingsForm(){
+  const s = await backend.getSettings() || {};
+  document.getElementById('fGiftPassword').value = s.password || '';
+  document.getElementById('fCoupleName').value = s.coupleName || '';
+  document.getElementById('fMsgTitle').value = s.messageTitle || '';
+  document.getElementById('fMsgBody').value = s.message || '';
+  document.getElementById('fBtnText').value = s.buttonText || '';
+}
+
+document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
+  const password = document.getElementById('fGiftPassword').value.trim().replace(/\D/g,'');
+  const coupleName = document.getElementById('fCoupleName').value.trim();
+  const messageTitle = document.getElementById('fMsgTitle').value.trim();
+  const message = document.getElementById('fMsgBody').value;
+  const buttonText = document.getElementById('fBtnText').value.trim();
+  await backend.saveSettings({ password: password || '1234', coupleName, messageTitle, message, buttonText });
+  const status = document.getElementById('settingsSaveStatus');
+  status.classList.add('show');
+  setTimeout(() => status.classList.remove('show'), 1800);
+  loadHome();
+});
+
+// ---------------- Helpers ----------------
+function escapeAttr(str){ return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function flashSaved(row){ row.style.transition='background .3s'; row.style.background='#EAF6EE'; setTimeout(()=>{ row.style.background=''; }, 600); }
+
+function showProgress(wrapId, barId, pct){
+  const wrap = document.getElementById(wrapId), bar = document.getElementById(barId);
+  wrap.classList.remove('hidden');
+  bar.style.width = pct + '%';
+  if(pct >= 100) setTimeout(() => wrap.classList.add('hidden'), 400);
+}
+
+async function handleUploadError(e, listReload){
+  if(e && e.message === 'QUOTA'){
+    alert('الملف كبير جدًا لوضع المعاينة المحلي (سعة المتصفح محدودة). جرّب ملفًا أصغر، أو اربط Firebase لتخزين حقيقي بلا حدود المتصفح.');
+  } else {
+    console.error(e);
+    alert('حدث خطأ أثناء الرفع، حاول مجددًا.');
+  }
+  listReload();
+}
+
+// ---------------- Images ----------------
+document.getElementById('uploadImagesBtn').addEventListener('click', async () => {
+  const files = document.getElementById('imageInput').files;
+  if(!files.length){ alert('اختر صورة أولًا'); return; }
+  for(const file of files){
+    try{ await backend.addMemory('image', file, (pct) => showProgress('imageProgressWrap','imageProgressBar', pct)); }
+    catch(e){ await handleUploadError(e, loadImages); return; }
+  }
+  document.getElementById('imageInput').value = '';
+  loadImages(); loadHome();
+});
+
+async function loadImages(){
+  const list = document.getElementById('imagesList');
+  const docs = await backend.listMemories('image');
+  list.innerHTML = '';
+  if(!docs.length){ list.innerHTML = '<div class="empty-hint">لم تُضَف صور بعد</div>'; return; }
+  docs.forEach((m, i) => {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `
+      <img class="item-thumb" src="${m.url}">
+      <div class="item-body">
+        <input type="text" placeholder="تعليق" value="${m.caption?escapeAttr(m.caption):''}" data-field="caption">
+        <input type="text" placeholder="التاريخ (اختياري)" value="${m.date?escapeAttr(m.date):''}" data-field="date">
+      </div>
+      <div class="item-actions">
+        <button data-act="up" title="تحريك لأعلى">↑</button>
+        <button data-act="down" title="تحريك لأسفل">↓</button>
+        <button data-act="save" title="حفظ">💾</button>
+        <button data-act="del" title="حذف">🗑️</button>
+      </div>`;
+    row.querySelector('[data-act="up"]').addEventListener('click', async () => { await backend.swapMemoryOrder('image', m.id, -1); loadImages(); });
+    row.querySelector('[data-act="down"]').addEventListener('click', async () => { await backend.swapMemoryOrder('image', m.id, 1); loadImages(); });
+    row.querySelector('[data-act="save"]').addEventListener('click', async () => {
+      await backend.updateMemory(m.id, { caption: row.querySelector('[data-field="caption"]').value, date: row.querySelector('[data-field="date"]').value });
+      flashSaved(row);
+    });
+    row.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteMemory(m.id); loadImages(); loadHome(); } });
+    list.appendChild(row);
+  });
+}
+
+// ---------------- Videos ----------------
+document.getElementById('uploadVideosBtn').addEventListener('click', async () => {
+  const files = document.getElementById('videoInput').files;
+  if(!files.length){ alert('اختر فيديو أولًا'); return; }
+  for(const file of files){
+    try{ await backend.addMemory('video', file, (pct) => showProgress('videoProgressWrap','videoProgressBar', pct)); }
+    catch(e){ await handleUploadError(e, loadVideos); return; }
+  }
+  document.getElementById('videoInput').value = '';
+  loadVideos(); loadHome();
+});
+
+async function loadVideos(){
+  const list = document.getElementById('videosList');
+  const docs = await backend.listMemories('video');
+  list.innerHTML = '';
+  if(!docs.length){ list.innerHTML = '<div class="empty-hint">لم تُضَف فيديوهات بعد</div>'; return; }
+  docs.forEach((m) => {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `
+      <video class="item-thumb" src="${m.url}" muted></video>
+      <div class="item-body">
+        <input type="text" placeholder="عنوان / تعليق" value="${m.caption?escapeAttr(m.caption):''}" data-field="caption">
+        <input type="text" placeholder="التاريخ (اختياري)" value="${m.date?escapeAttr(m.date):''}" data-field="date">
+      </div>
+      <div class="item-actions">
+        <button data-act="up" title="تحريك لأعلى">↑</button>
+        <button data-act="down" title="تحريك لأسفل">↓</button>
+        <button data-act="save" title="حفظ">💾</button>
+        <button data-act="del" title="حذف">🗑️</button>
+      </div>`;
+    row.querySelector('[data-act="up"]').addEventListener('click', async () => { await backend.swapMemoryOrder('video', m.id, -1); loadVideos(); });
+    row.querySelector('[data-act="down"]').addEventListener('click', async () => { await backend.swapMemoryOrder('video', m.id, 1); loadVideos(); });
+    row.querySelector('[data-act="save"]').addEventListener('click', async () => {
+      await backend.updateMemory(m.id, { caption: row.querySelector('[data-field="caption"]').value, date: row.querySelector('[data-field="date"]').value });
+      flashSaved(row);
+    });
+    row.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteMemory(m.id); loadVideos(); loadHome(); } });
+    list.appendChild(row);
+  });
+}
+
+// ---------------- Songs ----------------
+document.getElementById('uploadSongBtn').addEventListener('click', async () => {
+  const files = document.getElementById('songInput').files;
+  if(!files.length){ alert('اختر ملف MP3 أولًا'); return; }
+  try{ await backend.addSong(files[0], (pct) => showProgress('songProgressWrap','songProgressBar', pct)); }
+  catch(e){ await handleUploadError(e, loadSongs); return; }
+  document.getElementById('songInput').value = '';
+  loadSongs(); loadHome();
+});
+
+async function loadSongs(){
+  const list = document.getElementById('songsList');
+  const docs = await backend.listSongs();
+  list.innerHTML = '';
+  if(!docs.length){ list.innerHTML = '<div class="empty-hint">لم تُضَف أغانٍ بعد</div>'; return; }
+  const previewAudio = document.getElementById('previewAudio');
+  docs.forEach((m) => {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `
+      <div class="item-thumb audio-thumb">🎵</div>
+      <div class="item-body">
+        <input type="text" value="${m.name?escapeAttr(m.name):''}" data-field="name" placeholder="اسم الأغنية">
+        <div class="item-meta">${m.fileName || ''}</div>
+        <label class="default-radio"><input type="radio" name="defaultSong" ${m.isDefault?'checked':''}> أغنية أساسية</label>
+      </div>
+      <div class="item-actions">
+        <button data-act="play" title="تشغيل">▶</button>
+        <button data-act="save" title="حفظ">💾</button>
+        <button data-act="del" title="حذف">🗑️</button>
+      </div>`;
+    row.querySelector('[data-act="play"]').addEventListener('click', () => { previewAudio.src = m.url; previewAudio.play().catch(()=>{}); });
+    row.querySelector('input[name="defaultSong"]').addEventListener('change', async () => { await backend.setDefaultSong(m.id); loadSongs(); });
+    row.querySelector('[data-act="save"]').addEventListener('click', async () => { await backend.updateSong(m.id, { name: row.querySelector('[data-field="name"]').value }); flashSaved(row); });
+    row.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteSong(m.id); loadSongs(); loadHome(); } });
+    list.appendChild(row);
+  });
+}
+
+initLogin();
+</script>
+</body>
+</html>
