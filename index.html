@@ -462,7 +462,20 @@ function showImageSlide(){
   }
 }
 
-function showVideoSlide(){
+// المتصفحات كثيرًا ما تفشل بصمت بتشغيل فيديو/صوت طويل مخزّن كنص Base64 كبير مباشرة.
+// نحوّله هنا لملف حقيقي بالذاكرة (Blob) أولًا، وهذا ما تتعامل معه المتصفحات بشكل موثوق مهما كبر حجمه.
+async function toPlayableUrl(dataUrl){
+  try{
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch(e){
+    console.error('تعذّر تحويل الملف لصيغة قابلة للتشغيل، سيُستخدم الرابط الأصلي:', e);
+    return dataUrl;
+  }
+}
+
+async function showVideoSlide(){
   const imgEl = document.getElementById('slideImage');
   const vidEl = document.getElementById('slideVideo');
   imgEl.classList.add('hidden');
@@ -470,7 +483,8 @@ function showVideoSlide(){
 
   const m = slideVideos[slideVidIndex];
   setSlideCaption(m);
-  vidEl.src = m.url;
+  if(!m._playUrl) m._playUrl = await toPlayableUrl(m.url);
+  vidEl.src = m._playUrl;
   vidEl.muted = false;
   vidEl.classList.remove('hidden');
   requestAnimationFrame(() => vidEl.classList.add('visible'));
@@ -545,7 +559,8 @@ async function loadMusic(){
   const songs = await backend.listSongs();
   if(!songs.length) return;
   const song = songs.find(s => s.isDefault) || songs[0];
-  audioEl = new Audio(song.url);
+  const playUrl = await toPlayableUrl(song.url);
+  audioEl = new Audio(playUrl);
   audioEl.loop = true;
   document.getElementById('songName').textContent = song.name || 'أغنيتنا';
   document.getElementById('musicPlayer').classList.remove('hidden');
