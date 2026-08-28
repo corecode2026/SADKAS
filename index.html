@@ -267,12 +267,26 @@ function checkPassword(){
   isChecking = true;
   const target = GIFT_SETTINGS.password || '';
   if(enteredCode === target && target.length > 0){
+    attemptAutoplayMusic();
     unlock();
   } else {
     showError('كلمة السر غير صحيحة، حاول مجددًا 💭');
     dotsWrap.querySelectorAll('.dot').forEach(d => d.classList.add('shake-anim'));
     setTimeout(() => { enteredCode=''; renderDots(); isChecking=false; }, 450);
   }
+}
+
+function attemptAutoplayMusic(){
+  // نحاول التشغيل هنا مباشرة (ضمن نفس تفاعل المستخدم بالضغط على المفتاح الأخير)
+  // حتى يسمح المتصفح بتشغيل الصوت تلقائيًا دون الحاجة لضغطة إضافية على زر التشغيل
+  if(!audioEl) return;
+  audioEl.play().then(() => {
+    isPlaying = true;
+    const btn = document.getElementById('playPause');
+    if(btn) btn.textContent = '❚❚';
+  }).catch(() => {
+    // إذا منع المتصفح التشغيل التلقائي، تبقى الأغنية جاهزة ويقدر يضغط زر التشغيل يدويًا
+  });
 }
 
 function showError(msg){ errorMsg.textContent = msg; errorMsg.classList.add('show'); }
