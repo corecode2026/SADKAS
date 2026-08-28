@@ -57,15 +57,9 @@ button{font-family:inherit;cursor:pointer;}
 .progress-bar>div{height:100%;background:var(--rose);width:0%;transition:width .2s;}
 .item-list{display:flex;flex-direction:column;gap:12px;}
 .item-row{display:flex;align-items:center;gap:14px;background:#FCF9F8;border:1px solid var(--line);border-radius:12px;padding:10px 14px;}
-.item-row-wrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#FCF9F8;}
-.item-row-wrap .item-row{border:none;border-radius:0;border-bottom:1px solid var(--line);}
-.crop-panel{display:flex;gap:16px;padding:12px 14px;align-items:flex-start;flex-wrap:wrap;}
-.crop-preview-box{position:relative;width:150px;height:112px;flex-shrink:0;border-radius:10px;overflow:hidden;background:#e9dcd9;}
-.crop-preview-box img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
-.crop-controls{flex:1;min-width:180px;display:flex;flex-direction:column;gap:8px;}
-.crop-controls label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px;}
-.crop-controls input[type=range]{width:100%;}
-.crop-controls input[type=number]{width:90px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);font-size:13px;background:#fff;}
+.duration-field{display:flex;align-items:center;gap:6px;margin-top:4px;}
+.duration-field label{font-size:11.5px;color:var(--muted);white-space:nowrap;}
+.duration-field input{width:70px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);font-size:13px;background:#fff;}
 .item-thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;background:#eee;flex-shrink:0;}
 .item-thumb.video-thumb,.item-thumb.audio-thumb{display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--muted);}
 .item-body{flex:1;min-width:0;}
@@ -77,6 +71,16 @@ button{font-family:inherit;cursor:pointer;}
 .default-radio{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
 .empty-hint{color:var(--muted);font-size:13.5px;padding:18px 4px;}
 @media (max-width:760px){#admin-shell{flex-direction:column;}.sidebar{width:100%;flex-direction:row;flex-wrap:wrap;padding:14px;}.sidebar h2{display:none;}.sidebar .logout{margin-top:0;}.main{padding:22px 16px;}}
+.crop-modal{position:fixed;inset:0;z-index:300;background:rgba(30,18,20,.75);display:flex;align-items:center;justify-content:center;padding:20px;}
+.crop-modal-inner{background:#fff;border-radius:18px;padding:24px;max-width:400px;width:100%;text-align:center;}
+.crop-modal-inner h3{font-size:18px;color:var(--rose-deep);margin-bottom:4px;font-family:'Aref Ruqaa',serif;}
+.crop-modal-hint{font-size:12px;color:var(--muted);margin-bottom:14px;}
+.crop-stage{position:relative;width:320px;height:240px;max-width:100%;margin:0 auto 16px;overflow:hidden;border-radius:12px;background:#000;touch-action:none;cursor:grab;}
+.crop-stage:active{cursor:grabbing;}
+.crop-stage img{position:absolute;top:0;left:0;transform-origin:top left;user-select:none;-webkit-user-drag:none;}
+.crop-zoom-label{display:block;font-size:12px;color:var(--muted);margin-bottom:16px;}
+.crop-zoom-label input{width:100%;margin-top:6px;}
+.crop-modal-actions{display:flex;gap:10px;justify-content:center;}
 </style>
 </head>
 <body>
@@ -168,6 +172,23 @@ button{font-family:inherit;cursor:pointer;}
 </div>
 
 <audio id="previewAudio" class="hidden"></audio>
+
+<div class="crop-modal hidden" id="cropModal">
+  <div class="crop-modal-inner">
+    <h3>اقتصاص الصورة</h3>
+    <div class="crop-modal-hint">اسحب الصورة لتحريكها، واستخدم شريط التكبير لضبط ما يظهر داخل الإطار</div>
+    <div class="crop-stage" id="cropStage">
+      <img id="cropSourceImg" alt="">
+    </div>
+    <label class="crop-zoom-label">التكبير
+      <input type="range" id="cropZoom" min="100" max="300" value="100">
+    </label>
+    <div class="crop-modal-actions">
+      <button class="btn secondary" id="cropCancelBtn">إلغاء</button>
+      <button class="btn" id="cropConfirmBtn">تم القص</button>
+    </div>
+  </div>
+</div>
 
 <!-- ============================================================
      إعدادات Firebase — عدّل القيم لربط الموقع بمشروعك
@@ -549,65 +570,143 @@ async function loadImages(){
   const docs = await backend.listMemories('image');
   list.innerHTML = '';
   if(!docs.length){ list.innerHTML = '<div class="empty-hint">لم تُضَف صور بعد</div>'; return; }
-  docs.forEach((m, i) => {
-    const posX = m.posX != null ? m.posX : 50;
-    const posY = m.posY != null ? m.posY : 50;
+  docs.forEach((m) => {
     const duration = m.duration != null ? m.duration : 4;
-
-    const wrap = document.createElement('div');
-    wrap.className = 'item-row-wrap';
-    wrap.innerHTML = `
-      <div class="item-row">
-        <img class="item-thumb" src="${m.url}">
-        <div class="item-body">
-          <input type="text" placeholder="تعليق" value="${m.caption?escapeAttr(m.caption):''}" data-field="caption">
-          <input type="text" placeholder="التاريخ (اختياري)" value="${m.date?escapeAttr(m.date):''}" data-field="date">
-        </div>
-        <div class="item-actions">
-          <button data-act="up" title="تحريك لأعلى">↑</button>
-          <button data-act="down" title="تحريك لأسفل">↓</button>
-          <button data-act="save" title="حفظ">💾</button>
-          <button data-act="del" title="حذف">🗑️</button>
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `
+      <img class="item-thumb" src="${m.url}">
+      <div class="item-body">
+        <input type="text" placeholder="تعليق" value="${m.caption?escapeAttr(m.caption):''}" data-field="caption">
+        <input type="text" placeholder="التاريخ (اختياري)" value="${m.date?escapeAttr(m.date):''}" data-field="date">
+        <div class="duration-field">
+          <label>مدة العرض (ثانية)</label>
+          <input type="number" min="1" max="30" step="0.5" value="${duration}" data-field="duration">
         </div>
       </div>
-      <div class="crop-panel">
-        <div class="crop-preview-box"><img class="crop-preview-img" src="${m.url}" style="object-position:${posX}% ${posY}%;"></div>
-        <div class="crop-controls">
-          <label>الموضع الأفقي (يحدد أي جزء من الصورة يظهر)
-            <input type="range" min="0" max="100" value="${posX}" data-field="posX">
-          </label>
-          <label>الموضع الرأسي
-            <input type="range" min="0" max="100" value="${posY}" data-field="posY">
-          </label>
-          <label>مدة العرض بالعرض التقديمي (ثانية)
-            <input type="number" min="1" max="30" step="0.5" value="${duration}" data-field="duration">
-          </label>
-        </div>
+      <div class="item-actions">
+        <button data-act="crop" title="قص الصورة">✂️</button>
+        <button data-act="up" title="تحريك لأعلى">↑</button>
+        <button data-act="down" title="تحريك لأسفل">↓</button>
+        <button data-act="save" title="حفظ">💾</button>
+        <button data-act="del" title="حذف">🗑️</button>
       </div>`;
-
-    const previewImg = wrap.querySelector('.crop-preview-img');
-    const rangeX = wrap.querySelector('[data-field="posX"]');
-    const rangeY = wrap.querySelector('[data-field="posY"]');
-    const updatePreview = () => { previewImg.style.objectPosition = rangeX.value + '% ' + rangeY.value + '%'; };
-    rangeX.addEventListener('input', updatePreview);
-    rangeY.addEventListener('input', updatePreview);
-
-    wrap.querySelector('[data-act="up"]').addEventListener('click', async () => { await backend.swapMemoryOrder('image', m.id, -1); loadImages(); });
-    wrap.querySelector('[data-act="down"]').addEventListener('click', async () => { await backend.swapMemoryOrder('image', m.id, 1); loadImages(); });
-    wrap.querySelector('[data-act="save"]').addEventListener('click', async () => {
+    row.querySelector('[data-act="crop"]').addEventListener('click', () => openCropModal(m));
+    row.querySelector('[data-act="up"]').addEventListener('click', async () => { await backend.swapMemoryOrder('image', m.id, -1); loadImages(); });
+    row.querySelector('[data-act="down"]').addEventListener('click', async () => { await backend.swapMemoryOrder('image', m.id, 1); loadImages(); });
+    row.querySelector('[data-act="save"]').addEventListener('click', async () => {
       await backend.updateMemory(m.id, {
-        caption: wrap.querySelector('[data-field="caption"]').value,
-        date: wrap.querySelector('[data-field="date"]').value,
-        posX: parseFloat(rangeX.value),
-        posY: parseFloat(rangeY.value),
-        duration: parseFloat(wrap.querySelector('[data-field="duration"]').value) || 4
+        caption: row.querySelector('[data-field="caption"]').value,
+        date: row.querySelector('[data-field="date"]').value,
+        duration: parseFloat(row.querySelector('[data-field="duration"]').value) || 4
       });
-      flashSaved(wrap.querySelector('.item-row'));
+      flashSaved(row);
     });
-    wrap.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteMemory(m.id); loadImages(); loadHome(); } });
-    list.appendChild(wrap);
+    row.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteMemory(m.id); loadImages(); loadHome(); } });
+    list.appendChild(row);
   });
 }
+
+// ---------------- Crop modal (drag + zoom, real pixel crop via canvas) ----------------
+const CROP_STAGE_W = 320, CROP_STAGE_H = 240;
+let cropState = null;
+let cropDragging = false, cropDragStartX = 0, cropDragStartY = 0, cropStartTX = 0, cropStartTY = 0;
+
+function openCropModal(memory){
+  const modal = document.getElementById('cropModal');
+  const img = document.getElementById('cropSourceImg');
+  cropState = { id: memory.id };
+  modal.classList.remove('hidden');
+  img.onload = () => {
+    cropState.naturalW = img.naturalWidth;
+    cropState.naturalH = img.naturalHeight;
+    cropState.baseScale = Math.max(CROP_STAGE_W / cropState.naturalW, CROP_STAGE_H / cropState.naturalH);
+    cropState.zoom = 1;
+    cropState.scale = cropState.baseScale;
+    const dispW = cropState.naturalW * cropState.scale, dispH = cropState.naturalH * cropState.scale;
+    cropState.translateX = (CROP_STAGE_W - dispW) / 2;
+    cropState.translateY = (CROP_STAGE_H - dispH) / 2;
+    document.getElementById('cropZoom').value = 100;
+    applyCropTransform();
+  };
+  img.src = memory.url;
+}
+
+function applyCropTransform(){
+  const img = document.getElementById('cropSourceImg');
+  img.style.width = cropState.naturalW + 'px';
+  img.style.height = cropState.naturalH + 'px';
+  img.style.transform = `translate(${cropState.translateX}px, ${cropState.translateY}px) scale(${cropState.scale})`;
+}
+
+function clampCropTranslate(){
+  const dispW = cropState.naturalW * cropState.scale, dispH = cropState.naturalH * cropState.scale;
+  cropState.translateX = Math.min(0, Math.max(CROP_STAGE_W - dispW, cropState.translateX));
+  cropState.translateY = Math.min(0, Math.max(CROP_STAGE_H - dispH, cropState.translateY));
+}
+
+const cropStageEl = document.getElementById('cropStage');
+cropStageEl.addEventListener('pointerdown', (e) => {
+  if(!cropState) return;
+  cropDragging = true;
+  cropDragStartX = e.clientX; cropDragStartY = e.clientY;
+  cropStartTX = cropState.translateX; cropStartTY = cropState.translateY;
+  cropStageEl.setPointerCapture(e.pointerId);
+});
+cropStageEl.addEventListener('pointermove', (e) => {
+  if(!cropDragging || !cropState) return;
+  cropState.translateX = cropStartTX + (e.clientX - cropDragStartX);
+  cropState.translateY = cropStartTY + (e.clientY - cropDragStartY);
+  clampCropTranslate();
+  applyCropTransform();
+});
+cropStageEl.addEventListener('pointerup', () => { cropDragging = false; });
+cropStageEl.addEventListener('pointercancel', () => { cropDragging = false; });
+
+document.getElementById('cropZoom').addEventListener('input', (e) => {
+  if(!cropState) return;
+  const oldScale = cropState.scale;
+  const oldDispW = cropState.naturalW * oldScale, oldDispH = cropState.naturalH * oldScale;
+  cropState.zoom = e.target.value / 100;
+  cropState.scale = cropState.baseScale * cropState.zoom;
+  const newDispW = cropState.naturalW * cropState.scale, newDispH = cropState.naturalH * cropState.scale;
+  cropState.translateX -= (newDispW - oldDispW) / 2;
+  cropState.translateY -= (newDispH - oldDispH) / 2;
+  clampCropTranslate();
+  applyCropTransform();
+});
+
+document.getElementById('cropCancelBtn').addEventListener('click', () => {
+  document.getElementById('cropModal').classList.add('hidden');
+  cropState = null;
+});
+
+document.getElementById('cropConfirmBtn').addEventListener('click', async () => {
+  if(!cropState) return;
+  const OUT_W = 900, OUT_H = 675;
+  const canvas = document.createElement('canvas');
+  canvas.width = OUT_W; canvas.height = OUT_H;
+  const ctx = canvas.getContext('2d');
+  const img = document.getElementById('cropSourceImg');
+  const sourceX = -cropState.translateX / cropState.scale;
+  const sourceY = -cropState.translateY / cropState.scale;
+  const sourceW = CROP_STAGE_W / cropState.scale;
+  const sourceH = CROP_STAGE_H / cropState.scale;
+  ctx.drawImage(img, sourceX, sourceY, sourceW, sourceH, 0, 0, OUT_W, OUT_H);
+  const newUrl = canvas.toDataURL('image/jpeg', 0.9);
+  const btn = document.getElementById('cropConfirmBtn');
+  btn.textContent = 'جارِ الحفظ...';
+  try{
+    await backend.updateMemory(cropState.id, { url: newUrl });
+  } catch(e){
+    console.error(e);
+    alert('تعذّر حفظ الصورة المقصوصة، حاول مجددًا.');
+  }
+  btn.textContent = 'تم القص';
+  document.getElementById('cropModal').classList.add('hidden');
+  cropState = null;
+  loadImages();
+});
 
 // ---------------- Videos ----------------
 document.getElementById('uploadVideosBtn').addEventListener('click', async () => {
