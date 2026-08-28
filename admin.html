@@ -57,6 +57,15 @@ button{font-family:inherit;cursor:pointer;}
 .progress-bar>div{height:100%;background:var(--rose);width:0%;transition:width .2s;}
 .item-list{display:flex;flex-direction:column;gap:12px;}
 .item-row{display:flex;align-items:center;gap:14px;background:#FCF9F8;border:1px solid var(--line);border-radius:12px;padding:10px 14px;}
+.item-row-wrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#FCF9F8;}
+.item-row-wrap .item-row{border:none;border-radius:0;border-bottom:1px solid var(--line);}
+.crop-panel{display:flex;gap:16px;padding:12px 14px;align-items:flex-start;flex-wrap:wrap;}
+.crop-preview-box{position:relative;width:150px;height:112px;flex-shrink:0;border-radius:10px;overflow:hidden;background:#e9dcd9;}
+.crop-preview-box img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.crop-controls{flex:1;min-width:180px;display:flex;flex-direction:column;gap:8px;}
+.crop-controls label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px;}
+.crop-controls input[type=range]{width:100%;}
+.crop-controls input[type=number]{width:90px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);font-size:13px;background:#fff;}
 .item-thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;background:#eee;flex-shrink:0;}
 .item-thumb.video-thumb,.item-thumb.audio-thumb{display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--muted);}
 .item-body{flex:1;min-width:0;}
@@ -528,28 +537,62 @@ async function loadImages(){
   list.innerHTML = '';
   if(!docs.length){ list.innerHTML = '<div class="empty-hint">لم تُضَف صور بعد</div>'; return; }
   docs.forEach((m, i) => {
-    const row = document.createElement('div');
-    row.className = 'item-row';
-    row.innerHTML = `
-      <img class="item-thumb" src="${m.url}">
-      <div class="item-body">
-        <input type="text" placeholder="تعليق" value="${m.caption?escapeAttr(m.caption):''}" data-field="caption">
-        <input type="text" placeholder="التاريخ (اختياري)" value="${m.date?escapeAttr(m.date):''}" data-field="date">
+    const posX = m.posX != null ? m.posX : 50;
+    const posY = m.posY != null ? m.posY : 50;
+    const duration = m.duration != null ? m.duration : 4;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'item-row-wrap';
+    wrap.innerHTML = `
+      <div class="item-row">
+        <img class="item-thumb" src="${m.url}">
+        <div class="item-body">
+          <input type="text" placeholder="تعليق" value="${m.caption?escapeAttr(m.caption):''}" data-field="caption">
+          <input type="text" placeholder="التاريخ (اختياري)" value="${m.date?escapeAttr(m.date):''}" data-field="date">
+        </div>
+        <div class="item-actions">
+          <button data-act="up" title="تحريك لأعلى">↑</button>
+          <button data-act="down" title="تحريك لأسفل">↓</button>
+          <button data-act="save" title="حفظ">💾</button>
+          <button data-act="del" title="حذف">🗑️</button>
+        </div>
       </div>
-      <div class="item-actions">
-        <button data-act="up" title="تحريك لأعلى">↑</button>
-        <button data-act="down" title="تحريك لأسفل">↓</button>
-        <button data-act="save" title="حفظ">💾</button>
-        <button data-act="del" title="حذف">🗑️</button>
+      <div class="crop-panel">
+        <div class="crop-preview-box"><img class="crop-preview-img" src="${m.url}" style="object-position:${posX}% ${posY}%;"></div>
+        <div class="crop-controls">
+          <label>الموضع الأفقي (يحدد أي جزء من الصورة يظهر)
+            <input type="range" min="0" max="100" value="${posX}" data-field="posX">
+          </label>
+          <label>الموضع الرأسي
+            <input type="range" min="0" max="100" value="${posY}" data-field="posY">
+          </label>
+          <label>مدة العرض بالعرض التقديمي (ثانية)
+            <input type="number" min="1" max="30" step="0.5" value="${duration}" data-field="duration">
+          </label>
+        </div>
       </div>`;
-    row.querySelector('[data-act="up"]').addEventListener('click', async () => { await backend.swapMemoryOrder('image', m.id, -1); loadImages(); });
-    row.querySelector('[data-act="down"]').addEventListener('click', async () => { await backend.swapMemoryOrder('image', m.id, 1); loadImages(); });
-    row.querySelector('[data-act="save"]').addEventListener('click', async () => {
-      await backend.updateMemory(m.id, { caption: row.querySelector('[data-field="caption"]').value, date: row.querySelector('[data-field="date"]').value });
-      flashSaved(row);
+
+    const previewImg = wrap.querySelector('.crop-preview-img');
+    const rangeX = wrap.querySelector('[data-field="posX"]');
+    const rangeY = wrap.querySelector('[data-field="posY"]');
+    const updatePreview = () => { previewImg.style.objectPosition = rangeX.value + '% ' + rangeY.value + '%'; };
+    rangeX.addEventListener('input', updatePreview);
+    rangeY.addEventListener('input', updatePreview);
+
+    wrap.querySelector('[data-act="up"]').addEventListener('click', async () => { await backend.swapMemoryOrder('image', m.id, -1); loadImages(); });
+    wrap.querySelector('[data-act="down"]').addEventListener('click', async () => { await backend.swapMemoryOrder('image', m.id, 1); loadImages(); });
+    wrap.querySelector('[data-act="save"]').addEventListener('click', async () => {
+      await backend.updateMemory(m.id, {
+        caption: wrap.querySelector('[data-field="caption"]').value,
+        date: wrap.querySelector('[data-field="date"]').value,
+        posX: parseFloat(rangeX.value),
+        posY: parseFloat(rangeY.value),
+        duration: parseFloat(wrap.querySelector('[data-field="duration"]').value) || 4
+      });
+      flashSaved(wrap.querySelector('.item-row'));
     });
-    row.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteMemory(m.id); loadImages(); loadHome(); } });
-    list.appendChild(row);
+    wrap.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteMemory(m.id); loadImages(); loadHome(); } });
+    list.appendChild(wrap);
   });
 }
 
