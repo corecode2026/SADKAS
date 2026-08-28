@@ -485,7 +485,7 @@ async function showVideoSlide(){
   setSlideCaption(m);
   if(!m._playUrl) m._playUrl = await toPlayableUrl(m.url);
   vidEl.src = m._playUrl;
-  vidEl.muted = false;
+  vidEl.muted = true;
   vidEl.classList.remove('hidden');
   requestAnimationFrame(() => vidEl.classList.add('visible'));
   vidEl.play().catch(() => {});
@@ -512,7 +512,7 @@ function advanceSlide(){
       slidePhase = 'images';
       slideImgIndex = 0;
       if(slideImages.length){ showImageSlide(); return; }
-      showVideoSlide(); // لا يوجد صور — أعد نفس الفيديوهات
+      // لا يوجد صور — لا نعيد تشغيل الفيديو من جديد، نتوقف عند آخر إطار
       return;
     }
     showVideoSlide();
