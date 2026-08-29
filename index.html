@@ -166,7 +166,12 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;}
 // ============================================================
 const IS_FIREBASE_CONFIGURED = window.FIREBASE_CONFIG.apiKey && !window.FIREBASE_CONFIG.apiKey.includes('PASTE_YOUR');
 
+// دعم أكثر من هدية: كل شخص إله رابط فيه ?gift=xxx خاص فيه. بدون هالمعامل،
+// يُستخدم "default" (الهدية الرئيسية، بنفس مسارات البيانات القديمة توافقًا مع أي محتوى محفوظ سابقًا).
+const GIFT_ID = new URLSearchParams(location.search).get('gift') || 'default';
+
 const LS_KEYS = { settings:'gift_settings', memories:'gift_memories', songs:'gift_songs' };
+function localKey(giftId, leaf){ return giftId === 'default' ? ('gift_' + leaf) : ('gift_' + leaf + '__' + giftId); }
 
 function lsGet(key, fallback){
   try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
@@ -175,13 +180,13 @@ function lsGet(key, fallback){
 function lsSet(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
 
 const LocalBackend = {
-  async getSettings(){ return lsGet(LS_KEYS.settings, null); },
-  async listMemories(type){
-    const all = lsGet(LS_KEYS.memories, []);
+  async getSettings(giftId){ return lsGet(localKey(giftId,'settings'), null); },
+  async listMemories(giftId, type){
+    const all = lsGet(localKey(giftId,'memories'), []);
     return all.filter(m => m.type === type).sort((a,b) => a.order - b.order);
   },
-  async listSongs(){
-    return lsGet(LS_KEYS.songs, []).sort((a,b) => a.order - b.order);
+  async listSongs(giftId){
+    return lsGet(localKey(giftId,'songs'), []).sort((a,b) => a.order - b.order);
   }
 };
 
@@ -190,6 +195,9 @@ if(IS_FIREBASE_CONFIGURED){
   try{
     firebase.initializeApp(window.FIREBASE_CONFIG);
     const db = firebase.database();
+
+    // مسار كل هدية: "default" يستخدم المسارات القديمة (توافقًا مع بيانات محفوظة سابقًا)
+    function gpath(giftId, leaf){ return giftId === 'default' ? leaf : ('gifts/'+giftId+'/'+leaf); }
 
     function objToSortedArray(obj, type){
       return Object.entries(obj || {})
@@ -212,16 +220,16 @@ if(IS_FIREBASE_CONFIGURED){
     }
 
     FirebaseBackend = {
-      async getSettings(){
-        const snap = await db.ref('settings/gift').once('value');
+      async getSettings(giftId){
+        const snap = await db.ref(gpath(giftId,'settings/gift')).once('value');
         return snap.val() || null;
       },
-      async listMemories(type){
-        const snap = await db.ref('memories').once('value');
+      async listMemories(giftId, type){
+        const snap = await db.ref(gpath(giftId,'memories')).once('value');
         return withResolvedUrl(objToSortedArray(snap.val(), type));
       },
-      async listSongs(){
-        const snap = await db.ref('songs').once('value');
+      async listSongs(giftId){
+        const snap = await db.ref(gpath(giftId,'songs')).once('value');
         return withResolvedUrl(objToSortedArray(snap.val()));
       }
     };
@@ -576,7 +584,7 @@ document.getElementById('slideshow').addEventListener('click', () => {
 async function startSlideshow(){
   if(slideshowStarted) return; // تُعرض مرة واحدة فقط لكل زيارة
   slideshowStarted = true;
-  const [images, videos] = await Promise.all([backend.listMemories('image'), backend.listMemories('video')]);
+  const [images, videos] = await Promise.all([backend.listMemories(GIFT_ID,'image'), backend.listMemories(GIFT_ID,'video')]);
   slideImages = images;
   slideVideos = videos;
   if(!slideImages.length && !slideVideos.length){
@@ -592,7 +600,7 @@ async function startSlideshow(){
 let audioEl = null, isPlaying = false;
 
 async function loadMusic(){
-  const songs = await backend.listSongs();
+  const songs = await backend.listSongs(GIFT_ID);
   if(!songs.length) return;
   const song = songs.find(s => s.isDefault) || songs[0];
   const playUrl = await toPlayableUrl(song.url);
@@ -613,7 +621,7 @@ async function init(){
   buildKeypad();
   renderDots();
   try{
-    GIFT_SETTINGS = await backend.getSettings();
+    GIFT_SETTINGS = await backend.getSettings(GIFT_ID);
     if(!GIFT_SETTINGS) GIFT_SETTINGS = { password:'1234' };
   } catch(e){
     console.error(e);
