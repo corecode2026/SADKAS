@@ -81,6 +81,19 @@ button{font-family:inherit;cursor:pointer;}
 .crop-zoom-label{display:block;font-size:12px;color:var(--muted);margin-bottom:16px;}
 .crop-zoom-label input{width:100%;margin-top:6px;}
 .crop-modal-actions{display:flex;gap:10px;justify-content:center;}
+#gifts-screen{min-height:100vh;background:var(--bg);padding:40px 20px;}
+.gifts-wrap{max-width:760px;margin:0 auto;}
+.gifts-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:8px;}
+.gifts-header h1{font-size:28px;color:var(--rose-deep);}
+.gifts-header-actions{display:flex;gap:10px;align-items:center;}
+.gifts-header-actions .logout{color:var(--muted);font-size:13px;}
+.gifts-hint{color:var(--muted);font-size:13.5px;margin-bottom:24px;}
+.gifts-list{display:flex;flex-direction:column;gap:14px;}
+.gift-card{background:var(--panel);border-radius:var(--radius);padding:18px 20px;box-shadow:0 10px 26px -18px rgba(74,46,53,.3);display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;}
+.gift-card-info{flex:1;min-width:220px;}
+.gift-card-label{font-weight:700;font-size:16px;margin-bottom:8px;}
+.gift-card-link{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);font-size:12px;background:#FCF9F8;color:var(--muted);}
+.gift-card-actions{display:flex;gap:8px;flex-shrink:0;}
 </style>
 </head>
 <body>
@@ -98,15 +111,30 @@ button{font-family:inherit;cursor:pointer;}
   </div>
 </div>
 
+<div id="gifts-screen" class="hidden">
+  <div class="gifts-wrap">
+    <div class="gifts-header">
+      <h1>هداياك 💌</h1>
+      <div class="gifts-header-actions">
+        <button class="btn" id="createGiftBtn">+ هدية جديدة</button>
+        <button class="logout" id="giftsLogoutBtn">تسجيل الخروج</button>
+      </div>
+    </div>
+    <p class="gifts-hint">كل هدية إلها رابط خاص ومحتوى مستقل (رسالة، صور، فيديوهات، أغنية) — ابعت لكل شخص رابطه الخاص.</p>
+    <div id="giftsList" class="gifts-list"></div>
+  </div>
+</div>
+
 <div id="admin-shell" class="hidden">
   <aside class="sidebar">
-    <h2>لوحة التحكم<span>موقع الهدية</span></h2>
+    <h2>لوحة التحكم<span id="currentGiftLabel">موقع الهدية</span></h2>
+    <button class="nav-item" id="backToGiftsBtn">← الهدايا</button>
     <button class="nav-item active" data-view="home">🏠 الرئيسية</button>
     <button class="nav-item" data-view="settings">📝 الإعدادات</button>
     <button class="nav-item" data-view="images">📷 الصور</button>
     <button class="nav-item" data-view="videos">🎥 الفيديوهات</button>
     <button class="nav-item" data-view="songs">🎵 الأغاني</button>
-    <a class="nav-item" href="index.html" target="_blank" style="text-decoration:none;display:block;text-align:right;">👁️ معاينة الموقع</a>
+    <a class="nav-item" id="previewSiteLink" href="index.html" target="_blank" style="text-decoration:none;display:block;text-align:right;">👁️ معاينة الموقع</a>
     <button class="logout" id="logoutBtn">تسجيل الخروج</button>
   </aside>
 
@@ -223,9 +251,13 @@ async function sha256(text){
 }
 function genId(){ return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
 
-const LS_KEYS = { settings:'gift_settings', adminHash:'gift_admin_hash', memories:'gift_memories', songs:'gift_songs' };
+const LS_KEYS = { adminHash:'gift_admin_hash', index:'gift_index' };
 function lsGet(key, fallback){ try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch(e){ return fallback; } }
 function lsSet(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+
+// المفتاح المحلي لكل هدية: الهدية الافتراضية "default" تستخدم نفس المفاتيح القديمة
+// (توافقًا مع أي بيانات محفوظة سابقًا)، وأي هدية أخرى تُخزَّن بمفتاح خاص بها.
+function localKey(giftId, leaf){ return giftId === 'default' ? ('gift_' + leaf) : ('gift_' + leaf + '__' + giftId); }
 
 function readFileAsDataURL(file, onProgress){
   return new Promise((resolve, reject) => {
@@ -239,31 +271,47 @@ function readFileAsDataURL(file, onProgress){
 
 const LocalBackend = {
   mode: 'local',
-  async getSettings(){ return lsGet(LS_KEYS.settings, {}); },
-  async saveSettings(obj){ lsSet(LS_KEYS.settings, obj); },
+  async listGifts(){ return lsGet(LS_KEYS.index, []).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)); },
+  async createGift(label){
+    const id = 'g_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+    const list = lsGet(LS_KEYS.index, []);
+    list.push({ id, label, createdAt: Date.now() });
+    lsSet(LS_KEYS.index, list);
+    lsSet(localKey(id,'settings'), { password: '1234' });
+    return id;
+  },
+  async deleteGift(id){
+    const list = lsGet(LS_KEYS.index, []).filter(g => g.id !== id);
+    lsSet(LS_KEYS.index, list);
+    localStorage.removeItem(localKey(id,'settings'));
+    localStorage.removeItem(localKey(id,'memories'));
+    localStorage.removeItem(localKey(id,'songs'));
+  },
+  async getSettings(giftId){ return lsGet(localKey(giftId,'settings'), {}); },
+  async saveSettings(giftId, obj){ lsSet(localKey(giftId,'settings'), obj); },
   async getAdminHash(){ return lsGet(LS_KEYS.adminHash, null); },
   async setAdminHash(hash){ lsSet(LS_KEYS.adminHash, hash); },
-  async listMemories(type){ return lsGet(LS_KEYS.memories, []).filter(m => m.type === type).sort((a,b)=>a.order-b.order); },
-  async addMemory(type, file, onProgress){
+  async listMemories(giftId, type){ return lsGet(localKey(giftId,'memories'), []).filter(m => m.type === type).sort((a,b)=>a.order-b.order); },
+  async addMemory(giftId, type, file, onProgress){
     const url = await readFileAsDataURL(file, onProgress);
-    const all = lsGet(LS_KEYS.memories, []);
+    const all = lsGet(localKey(giftId,'memories'), []);
     const sameType = all.filter(m => m.type === type);
     const maxOrder = sameType.length ? Math.max(...sameType.map(m => m.order)) : -1;
     all.push({ id: genId(), type, url, caption:'', date:'', order: maxOrder+1 });
-    try{ lsSet(LS_KEYS.memories, all); }
+    try{ lsSet(localKey(giftId,'memories'), all); }
     catch(e){ throw new Error('QUOTA'); }
   },
-  async updateMemory(id, fields){
-    const all = lsGet(LS_KEYS.memories, []);
+  async updateMemory(giftId, id, fields){
+    const all = lsGet(localKey(giftId,'memories'), []);
     const idx = all.findIndex(m => m.id === id);
-    if(idx>-1){ all[idx] = { ...all[idx], ...fields }; lsSet(LS_KEYS.memories, all); }
+    if(idx>-1){ all[idx] = { ...all[idx], ...fields }; lsSet(localKey(giftId,'memories'), all); }
   },
-  async deleteMemory(id){
-    const all = lsGet(LS_KEYS.memories, []).filter(m => m.id !== id);
-    lsSet(LS_KEYS.memories, all);
+  async deleteMemory(giftId, id){
+    const all = lsGet(localKey(giftId,'memories'), []).filter(m => m.id !== id);
+    lsSet(localKey(giftId,'memories'), all);
   },
-  async swapMemoryOrder(type, id, direction){
-    const all = lsGet(LS_KEYS.memories, []);
+  async swapMemoryOrder(giftId, type, id, direction){
+    const all = lsGet(localKey(giftId,'memories'), []);
     const sameType = all.filter(m => m.type === type).sort((a,b)=>a.order-b.order);
     const idx = sameType.findIndex(m => m.id === id);
     const otherIdx = idx + direction;
@@ -274,29 +322,29 @@ const LocalBackend = {
     const idxAll_b = all.findIndex(m => m.id === b.id);
     all[idxAll_a].order = orderB;
     all[idxAll_b].order = orderA;
-    lsSet(LS_KEYS.memories, all);
+    lsSet(localKey(giftId,'memories'), all);
   },
-  async listSongs(){ return lsGet(LS_KEYS.songs, []).sort((a,b)=>a.order-b.order); },
-  async addSong(file, onProgress){
+  async listSongs(giftId){ return lsGet(localKey(giftId,'songs'), []).sort((a,b)=>a.order-b.order); },
+  async addSong(giftId, file, onProgress){
     const url = await readFileAsDataURL(file, onProgress);
-    const all = lsGet(LS_KEYS.songs, []);
+    const all = lsGet(localKey(giftId,'songs'), []);
     const maxOrder = all.length ? Math.max(...all.map(s => s.order)) : -1;
     all.push({ id: genId(), name: file.name.replace(/\.[^/.]+$/,''), fileName: file.name, url, isDefault: all.length===0, order: maxOrder+1 });
-    try{ lsSet(LS_KEYS.songs, all); }
+    try{ lsSet(localKey(giftId,'songs'), all); }
     catch(e){ throw new Error('QUOTA'); }
   },
-  async updateSong(id, fields){
-    const all = lsGet(LS_KEYS.songs, []);
+  async updateSong(giftId, id, fields){
+    const all = lsGet(localKey(giftId,'songs'), []);
     const idx = all.findIndex(s => s.id === id);
-    if(idx>-1){ all[idx] = { ...all[idx], ...fields }; lsSet(LS_KEYS.songs, all); }
+    if(idx>-1){ all[idx] = { ...all[idx], ...fields }; lsSet(localKey(giftId,'songs'), all); }
   },
-  async deleteSong(id){
-    const all = lsGet(LS_KEYS.songs, []).filter(s => s.id !== id);
-    lsSet(LS_KEYS.songs, all);
+  async deleteSong(giftId, id){
+    const all = lsGet(localKey(giftId,'songs'), []).filter(s => s.id !== id);
+    lsSet(localKey(giftId,'songs'), all);
   },
-  async setDefaultSong(id){
-    const all = lsGet(LS_KEYS.songs, []).map(s => ({ ...s, isDefault: s.id === id }));
-    lsSet(LS_KEYS.songs, all);
+  async setDefaultSong(giftId, id){
+    const all = lsGet(localKey(giftId,'songs'), []).map(s => ({ ...s, isDefault: s.id === id }));
+    lsSet(localKey(giftId,'songs'), all);
   }
 };
 
@@ -305,6 +353,10 @@ if(IS_FIREBASE_CONFIGURED){
   try{
     firebase.initializeApp(window.FIREBASE_CONFIG);
     const db = firebase.database();
+
+    // مسار كل هدية: الهدية الافتراضية "default" تستخدم نفس المسارات القديمة
+    // (توافقًا مع أي بيانات محفوظة سابقًا)، وأي هدية أخرى تُخزَّن تحت gifts/{id}/...
+    function gpath(giftId, leaf){ return giftId === 'default' ? leaf : ('gifts/'+giftId+'/'+leaf); }
 
     function objToSortedArray(obj, type){
       return Object.entries(obj || {})
@@ -348,52 +400,67 @@ if(IS_FIREBASE_CONFIGURED){
 
     FirebaseBackend = {
       mode: 'firebase',
-      async getSettings(){ const snap = await db.ref('settings/gift').once('value'); return snap.val() || {}; },
-      async saveSettings(obj){ await db.ref('settings/gift').update(obj); },
+      async listGifts(){
+        const snap = await db.ref('giftsIndex').once('value');
+        const val = snap.val() || {};
+        return Object.entries(val).map(([id, g]) => ({ id, ...g })).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+      },
+      async createGift(label){
+        const id = 'g_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+        await db.ref('giftsIndex/'+id).set({ label, createdAt: Date.now() });
+        await db.ref(gpath(id,'settings/gift')).set({ password: '1234' });
+        return id;
+      },
+      async deleteGift(id){
+        await db.ref('giftsIndex/'+id).remove();
+        await db.ref('gifts/'+id).remove();
+      },
+      async getSettings(giftId){ const snap = await db.ref(gpath(giftId,'settings/gift')).once('value'); return snap.val() || {}; },
+      async saveSettings(giftId, obj){ await db.ref(gpath(giftId,'settings/gift')).update(obj); },
       async getAdminHash(){ const snap = await db.ref('settings/admin/passwordHash').once('value'); return snap.val() || null; },
       async setAdminHash(hash){ await db.ref('settings/admin').set({ passwordHash: hash }); },
-      async listMemories(type){
-        const snap = await db.ref('memories').once('value');
+      async listMemories(giftId, type){
+        const snap = await db.ref(gpath(giftId,'memories')).once('value');
         return withResolvedUrl(objToSortedArray(snap.val(), type));
       },
-      async addMemory(type, file, onProgress){
+      async addMemory(giftId, type, file, onProgress){
         const dataUrl = await readFileAsDataURL(file, (pct) => { if(onProgress) onProgress(pct/2); });
-        const existing = objToSortedArray((await db.ref('memories').once('value')).val(), type);
+        const existing = objToSortedArray((await db.ref(gpath(giftId,'memories')).once('value')).val(), type);
         const order = existing.length ? existing[existing.length-1].order + 1 : 0;
-        const newRef = db.ref('memories').push();
+        const newRef = db.ref(gpath(giftId,'memories')).push();
         await writeRecordWithUrl(newRef, dataUrl, { type, caption:'', date:'', order, createdAt: firebase.database.ServerValue.TIMESTAMP }, onProgress);
       },
-      async updateMemory(id, fields){ await db.ref('memories/'+id).update(fields); },
-      async deleteMemory(id){ await db.ref('memories/'+id).remove(); },
-      async swapMemoryOrder(type, id, direction){
-        const list = objToSortedArray((await db.ref('memories').once('value')).val(), type);
+      async updateMemory(giftId, id, fields){ await db.ref(gpath(giftId,'memories')+'/'+id).update(fields); },
+      async deleteMemory(giftId, id){ await db.ref(gpath(giftId,'memories')+'/'+id).remove(); },
+      async swapMemoryOrder(giftId, type, id, direction){
+        const list = objToSortedArray((await db.ref(gpath(giftId,'memories')).once('value')).val(), type);
         const idx = list.findIndex(m => m.id === id);
         const otherIdx = idx + direction;
         if(otherIdx < 0 || otherIdx >= list.length) return;
         const a = list[idx], b = list[otherIdx];
         const updates = {};
-        updates['memories/'+a.id+'/order'] = b.order;
-        updates['memories/'+b.id+'/order'] = a.order;
+        updates[gpath(giftId,'memories')+'/'+a.id+'/order'] = b.order;
+        updates[gpath(giftId,'memories')+'/'+b.id+'/order'] = a.order;
         await db.ref().update(updates);
       },
-      async listSongs(){
-        const snap = await db.ref('songs').once('value');
+      async listSongs(giftId){
+        const snap = await db.ref(gpath(giftId,'songs')).once('value');
         return withResolvedUrl(objToSortedArray(snap.val()));
       },
-      async addSong(file, onProgress){
+      async addSong(giftId, file, onProgress){
         const dataUrl = await readFileAsDataURL(file, (pct) => { if(onProgress) onProgress(pct/2); });
-        const existing = objToSortedArray((await db.ref('songs').once('value')).val());
+        const existing = objToSortedArray((await db.ref(gpath(giftId,'songs')).once('value')).val());
         const order = existing.length ? existing[existing.length-1].order + 1 : 0;
-        const newRef = db.ref('songs').push();
+        const newRef = db.ref(gpath(giftId,'songs')).push();
         await writeRecordWithUrl(newRef, dataUrl, { name: file.name.replace(/\.[^/.]+$/,''), fileName: file.name, isDefault: existing.length===0, order, createdAt: firebase.database.ServerValue.TIMESTAMP }, onProgress);
       },
-      async updateSong(id, fields){ await db.ref('songs/'+id).update(fields); },
-      async deleteSong(id){ await db.ref('songs/'+id).remove(); },
-      async setDefaultSong(id){
-        const snap = await db.ref('songs').once('value');
+      async updateSong(giftId, id, fields){ await db.ref(gpath(giftId,'songs')+'/'+id).update(fields); },
+      async deleteSong(giftId, id){ await db.ref(gpath(giftId,'songs')+'/'+id).remove(); },
+      async setDefaultSong(giftId, id){
+        const snap = await db.ref(gpath(giftId,'songs')).once('value');
         const val = snap.val() || {};
         const updates = {};
-        Object.keys(val).forEach(sid => { updates['songs/'+sid+'/isDefault'] = (sid === id); });
+        Object.keys(val).forEach(sid => { updates[gpath(giftId,'songs')+'/'+sid+'/isDefault'] = (sid === id); });
         await db.ref().update(updates);
       }
     };
@@ -401,6 +468,9 @@ if(IS_FIREBASE_CONFIGURED){
 }
 
 const backend = FirebaseBackend || LocalBackend;
+
+let currentGiftId = 'default';
+let currentGiftLabel = 'الهدية الرئيسية';
 
 const modeBanner = document.getElementById('modeBanner');
 if(!FirebaseBackend){
@@ -469,9 +539,75 @@ document.getElementById('logoutBtn').addEventListener('click', () => { sessionSt
 
 function showShell(){
   loginScreen.classList.add('hidden');
+  showGiftsScreen();
+}
+
+// ---------------- Gifts (multi-recipient) ----------------
+async function showGiftsScreen(){
+  adminShell.classList.add('hidden');
+  document.getElementById('gifts-screen').classList.remove('hidden');
+  await loadGiftsList();
+}
+
+async function loadGiftsList(){
+  const gifts = await backend.listGifts();
+  const container = document.getElementById('giftsList');
+  container.innerHTML = '';
+  const allGifts = [{ id: 'default', label: 'الهدية الرئيسية', isDefault: true }, ...gifts];
+  allGifts.forEach(g => {
+    const link = location.href.replace(/admin\.html.*$/, 'index.html') + (g.id === 'default' ? '' : ('?gift=' + g.id));
+    const card = document.createElement('div');
+    card.className = 'gift-card';
+    card.innerHTML = `
+      <div class="gift-card-info">
+        <div class="gift-card-label">${escapeAttr(g.label)}</div>
+        <input class="gift-card-link" readonly value="${escapeAttr(link)}">
+      </div>
+      <div class="gift-card-actions">
+        <button class="btn secondary sm" data-act="copy">نسخ الرابط</button>
+        <button class="btn sm" data-act="edit">تعديل</button>
+        ${g.isDefault ? '' : '<button class="btn danger sm" data-act="del">حذف</button>'}
+      </div>`;
+    card.querySelector('[data-act="copy"]').addEventListener('click', () => {
+      navigator.clipboard.writeText(link).then(() => alert('تم نسخ الرابط ✓')).catch(() => alert(link));
+    });
+    card.querySelector('[data-act="edit"]').addEventListener('click', () => openGiftDashboard(g.id, g.label));
+    if(!g.isDefault){
+      card.querySelector('[data-act="del"]').addEventListener('click', async () => {
+        if(confirm(`حذف "${g.label}" نهائيًا؟ سيتم حذف كل صورها وفيديوهاتها ولا يمكن التراجع.`)){
+          await backend.deleteGift(g.id);
+          loadGiftsList();
+        }
+      });
+    }
+    container.appendChild(card);
+  });
+}
+
+document.getElementById('createGiftBtn').addEventListener('click', async () => {
+  const label = prompt('اسم الهدية (مثلاً: هدية سارة)');
+  if(!label || !label.trim()) return;
+  await backend.createGift(label.trim());
+  loadGiftsList();
+});
+
+document.getElementById('giftsLogoutBtn').addEventListener('click', () => { sessionStorage.removeItem(SESSION_KEY); location.reload(); });
+
+function openGiftDashboard(giftId, label){
+  currentGiftId = giftId;
+  currentGiftLabel = label;
+  document.getElementById('gifts-screen').classList.add('hidden');
   adminShell.classList.remove('hidden');
+  document.getElementById('currentGiftLabel').textContent = label;
+  document.getElementById('previewSiteLink').href = giftId === 'default' ? 'index.html' : ('index.html?gift=' + giftId);
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-home').classList.add('active');
+  document.querySelectorAll('.nav-item[data-view]').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.nav-item[data-view="home"]').forEach(n => n.classList.add('active'));
   loadHome(); loadSettingsForm(); loadImages(); loadVideos(); loadSongs();
 }
+
+document.getElementById('backToGiftsBtn').addEventListener('click', showGiftsScreen);
 
 // ---------------- Navigation ----------------
 document.querySelectorAll('[data-view]').forEach(el => {
@@ -487,10 +623,10 @@ document.querySelectorAll('[data-view]').forEach(el => {
 
 // ---------------- Home ----------------
 async function loadHome(){
-  const s = await backend.getSettings() || {};
+  const s = await backend.getSettings(currentGiftId) || {};
   document.getElementById('statPassword').textContent = s.password ? '•'.repeat(s.password.length) : 'غير محددة';
   document.getElementById('statMessage').textContent = s.message ? (s.message.slice(0,18) + (s.message.length>18?'…':'')) : 'غير مكتوبة';
-  const [imgs, vids, songs] = await Promise.all([backend.listMemories('image'), backend.listMemories('video'), backend.listSongs()]);
+  const [imgs, vids, songs] = await Promise.all([backend.listMemories(currentGiftId,'image'), backend.listMemories(currentGiftId,'video'), backend.listSongs(currentGiftId)]);
   document.getElementById('statImages').textContent = imgs.length;
   document.getElementById('statVideos').textContent = vids.length;
   document.getElementById('statSongs').textContent = songs.length;
@@ -498,7 +634,7 @@ async function loadHome(){
 
 // ---------------- Settings ----------------
 async function loadSettingsForm(){
-  const s = await backend.getSettings() || {};
+  const s = await backend.getSettings(currentGiftId) || {};
   document.getElementById('fGiftPassword').value = s.password || '';
   document.getElementById('fCoupleName').value = s.coupleName || '';
   document.getElementById('fMsgTitle').value = s.messageTitle || '';
@@ -512,7 +648,7 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
   const messageTitle = document.getElementById('fMsgTitle').value.trim();
   const message = document.getElementById('fMsgBody').value;
   const buttonText = document.getElementById('fBtnText').value.trim();
-  await backend.saveSettings({ password: password || '1234', coupleName, messageTitle, message, buttonText });
+  await backend.saveSettings(currentGiftId, { password: password || '1234', coupleName, messageTitle, message, buttonText });
   const status = document.getElementById('settingsSaveStatus');
   status.classList.add('show');
   setTimeout(() => status.classList.remove('show'), 1800);
@@ -558,7 +694,7 @@ document.getElementById('uploadImagesBtn').addEventListener('click', async () =>
   const files = document.getElementById('imageInput').files;
   if(!files.length){ alert('اختر صورة أولًا'); return; }
   for(const file of files){
-    try{ await backend.addMemory('image', file, (pct) => showProgress('imageProgressWrap','imageProgressBar', pct)); }
+    try{ await backend.addMemory(currentGiftId,'image', file, (pct) => showProgress('imageProgressWrap','imageProgressBar', pct)); }
     catch(e){ await handleUploadError(e, loadImages); return; }
   }
   document.getElementById('imageInput').value = '';
@@ -567,7 +703,7 @@ document.getElementById('uploadImagesBtn').addEventListener('click', async () =>
 
 async function loadImages(){
   const list = document.getElementById('imagesList');
-  const docs = await backend.listMemories('image');
+  const docs = await backend.listMemories(currentGiftId,'image');
   list.innerHTML = '';
   if(!docs.length){ list.innerHTML = '<div class="empty-hint">لم تُضَف صور بعد</div>'; return; }
   docs.forEach((m) => {
@@ -592,17 +728,17 @@ async function loadImages(){
         <button data-act="del" title="حذف">🗑️</button>
       </div>`;
     row.querySelector('[data-act="crop"]').addEventListener('click', () => openCropModal(m));
-    row.querySelector('[data-act="up"]').addEventListener('click', async () => { await backend.swapMemoryOrder('image', m.id, -1); loadImages(); });
-    row.querySelector('[data-act="down"]').addEventListener('click', async () => { await backend.swapMemoryOrder('image', m.id, 1); loadImages(); });
+    row.querySelector('[data-act="up"]').addEventListener('click', async () => { await backend.swapMemoryOrder(currentGiftId,'image', m.id, -1); loadImages(); });
+    row.querySelector('[data-act="down"]').addEventListener('click', async () => { await backend.swapMemoryOrder(currentGiftId,'image', m.id, 1); loadImages(); });
     row.querySelector('[data-act="save"]').addEventListener('click', async () => {
-      await backend.updateMemory(m.id, {
+      await backend.updateMemory(currentGiftId, m.id, {
         caption: row.querySelector('[data-field="caption"]').value,
         date: row.querySelector('[data-field="date"]').value,
         duration: parseFloat(row.querySelector('[data-field="duration"]').value) || 4
       });
       flashSaved(row);
     });
-    row.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteMemory(m.id); loadImages(); loadHome(); } });
+    row.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteMemory(currentGiftId, m.id); loadImages(); loadHome(); } });
     list.appendChild(row);
   });
 }
@@ -697,7 +833,7 @@ document.getElementById('cropConfirmBtn').addEventListener('click', async () => 
   const btn = document.getElementById('cropConfirmBtn');
   btn.textContent = 'جارِ الحفظ...';
   try{
-    await backend.updateMemory(cropState.id, { url: newUrl });
+    await backend.updateMemory(currentGiftId, cropState.id, { url: newUrl });
   } catch(e){
     console.error(e);
     alert('تعذّر حفظ الصورة المقصوصة، حاول مجددًا.');
@@ -713,7 +849,7 @@ document.getElementById('uploadVideosBtn').addEventListener('click', async () =>
   const files = document.getElementById('videoInput').files;
   if(!files.length){ alert('اختر فيديو أولًا'); return; }
   for(const file of files){
-    try{ await backend.addMemory('video', file, (pct) => showProgress('videoProgressWrap','videoProgressBar', pct)); }
+    try{ await backend.addMemory(currentGiftId,'video', file, (pct) => showProgress('videoProgressWrap','videoProgressBar', pct)); }
     catch(e){ await handleUploadError(e, loadVideos); return; }
   }
   document.getElementById('videoInput').value = '';
@@ -722,7 +858,7 @@ document.getElementById('uploadVideosBtn').addEventListener('click', async () =>
 
 async function loadVideos(){
   const list = document.getElementById('videosList');
-  const docs = await backend.listMemories('video');
+  const docs = await backend.listMemories(currentGiftId,'video');
   list.innerHTML = '';
   if(!docs.length){ list.innerHTML = '<div class="empty-hint">لم تُضَف فيديوهات بعد</div>'; return; }
   list.innerHTML = '<div class="empty-hint">جارِ تجهيز المعاينات...</div>';
@@ -743,13 +879,13 @@ async function loadVideos(){
         <button data-act="save" title="حفظ">💾</button>
         <button data-act="del" title="حذف">🗑️</button>
       </div>`;
-    row.querySelector('[data-act="up"]').addEventListener('click', async () => { await backend.swapMemoryOrder('video', m.id, -1); loadVideos(); });
-    row.querySelector('[data-act="down"]').addEventListener('click', async () => { await backend.swapMemoryOrder('video', m.id, 1); loadVideos(); });
+    row.querySelector('[data-act="up"]').addEventListener('click', async () => { await backend.swapMemoryOrder(currentGiftId,'video', m.id, -1); loadVideos(); });
+    row.querySelector('[data-act="down"]').addEventListener('click', async () => { await backend.swapMemoryOrder(currentGiftId,'video', m.id, 1); loadVideos(); });
     row.querySelector('[data-act="save"]').addEventListener('click', async () => {
-      await backend.updateMemory(m.id, { caption: row.querySelector('[data-field="caption"]').value, date: row.querySelector('[data-field="date"]').value });
+      await backend.updateMemory(currentGiftId, m.id, { caption: row.querySelector('[data-field="caption"]').value, date: row.querySelector('[data-field="date"]').value });
       flashSaved(row);
     });
-    row.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteMemory(m.id); loadVideos(); loadHome(); } });
+    row.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteMemory(currentGiftId, m.id); loadVideos(); loadHome(); } });
     list.appendChild(row);
   });
 }
@@ -758,7 +894,7 @@ async function loadVideos(){
 document.getElementById('uploadSongBtn').addEventListener('click', async () => {
   const files = document.getElementById('songInput').files;
   if(!files.length){ alert('اختر ملف MP3 أولًا'); return; }
-  try{ await backend.addSong(files[0], (pct) => showProgress('songProgressWrap','songProgressBar', pct)); }
+  try{ await backend.addSong(currentGiftId, files[0], (pct) => showProgress('songProgressWrap','songProgressBar', pct)); }
   catch(e){ await handleUploadError(e, loadSongs); return; }
   document.getElementById('songInput').value = '';
   loadSongs(); loadHome();
@@ -766,7 +902,7 @@ document.getElementById('uploadSongBtn').addEventListener('click', async () => {
 
 async function loadSongs(){
   const list = document.getElementById('songsList');
-  const docs = await backend.listSongs();
+  const docs = await backend.listSongs(currentGiftId);
   list.innerHTML = '';
   if(!docs.length){ list.innerHTML = '<div class="empty-hint">لم تُضَف أغانٍ بعد</div>'; return; }
   const previewAudio = document.getElementById('previewAudio');
@@ -791,9 +927,9 @@ async function loadSongs(){
       previewAudio.src = m._playUrl;
       previewAudio.play().catch(()=>{});
     });
-    row.querySelector('input[name="defaultSong"]').addEventListener('change', async () => { await backend.setDefaultSong(m.id); loadSongs(); });
-    row.querySelector('[data-act="save"]').addEventListener('click', async () => { await backend.updateSong(m.id, { name: row.querySelector('[data-field="name"]').value }); flashSaved(row); });
-    row.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteSong(m.id); loadSongs(); loadHome(); } });
+    row.querySelector('input[name="defaultSong"]').addEventListener('change', async () => { await backend.setDefaultSong(currentGiftId, m.id); loadSongs(); });
+    row.querySelector('[data-act="save"]').addEventListener('click', async () => { await backend.updateSong(currentGiftId, m.id, { name: row.querySelector('[data-field="name"]').value }); flashSaved(row); });
+    row.querySelector('[data-act="del"]').addEventListener('click', async () => { if(confirm('هل أنت متأكد من الحذف؟')){ await backend.deleteSong(currentGiftId, m.id); loadSongs(); loadHome(); } });
     list.appendChild(row);
   });
 }
