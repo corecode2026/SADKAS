@@ -94,6 +94,15 @@ button{font-family:inherit;cursor:pointer;}
 .gift-card-label{font-weight:700;font-size:16px;margin-bottom:8px;}
 .gift-card-link{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);font-size:12px;background:#FCF9F8;color:var(--muted);}
 .gift-card-actions{display:flex;gap:8px;flex-shrink:0;}
+.theme-swatches{display:flex;flex-wrap:wrap;gap:12px;}
+.theme-swatch{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:2px solid transparent;border-radius:12px;padding:6px;}
+.theme-swatch.selected{border-color:var(--rose-deep);background:#FBEFEE;}
+.swatch-circle{width:36px;height:36px;border-radius:50%;display:block;box-shadow:0 4px 10px rgba(0,0,0,.15);}
+.swatch-label{font-size:11px;color:var(--muted);}
+.decoration-options{display:flex;flex-wrap:wrap;gap:12px;}
+.decoration-option{display:flex;flex-direction:column;align-items:center;gap:4px;background:#FCF9F8;border:2px solid var(--line);border-radius:12px;padding:10px 14px;}
+.decoration-option.selected{border-color:var(--rose-deep);background:#FBEFEE;}
+.deco-emoji{font-size:22px;}
 </style>
 </head>
 <body>
@@ -167,6 +176,18 @@ button{font-family:inherit;cursor:pointer;}
         <div class="field"><label>نص زر التالي</label><input type="text" id="fBtnText" placeholder="التالي ❤️"></div>
         <button class="btn" id="saveSettingsBtn">حفظ التغييرات</button>
         <span class="save-status" id="settingsSaveStatus">تم الحفظ ✓</span>
+      </div>
+      <div class="panel">
+        <div class="field">
+          <label>لون الموقع</label>
+          <div class="theme-swatches" id="themeSwatches"></div>
+        </div>
+        <div class="field">
+          <label>الزخرفة المتطايرة بصفحة الذكريات</label>
+          <div class="decoration-options" id="decorationOptions"></div>
+        </div>
+        <button class="btn" id="saveThemeBtn">حفظ المظهر</button>
+        <span class="save-status" id="themeSaveStatus">تم الحفظ ✓</span>
       </div>
     </div>
 
@@ -288,7 +309,10 @@ const LocalBackend = {
     localStorage.removeItem(localKey(id,'songs'));
   },
   async getSettings(giftId){ return lsGet(localKey(giftId,'settings'), {}); },
-  async saveSettings(giftId, obj){ lsSet(localKey(giftId,'settings'), obj); },
+  async saveSettings(giftId, obj){
+    const existing = lsGet(localKey(giftId,'settings'), {});
+    lsSet(localKey(giftId,'settings'), { ...existing, ...obj });
+  },
   async getAdminHash(){ return lsGet(LS_KEYS.adminHash, null); },
   async setAdminHash(hash){ lsSet(LS_KEYS.adminHash, hash); },
   async listMemories(giftId, type){ return lsGet(localKey(giftId,'memories'), []).filter(m => m.type === type).sort((a,b)=>a.order-b.order); },
@@ -640,6 +664,10 @@ async function loadSettingsForm(){
   document.getElementById('fMsgTitle').value = s.messageTitle || '';
   document.getElementById('fMsgBody').value = s.message || '';
   document.getElementById('fBtnText').value = s.buttonText || '';
+  selectedTheme = s.themeKey || 'rose';
+  selectedDecoration = s.decoration || 'petals';
+  renderThemeSwatches();
+  renderDecorationOptions();
 }
 
 document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
@@ -653,6 +681,58 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
   status.classList.add('show');
   setTimeout(() => status.classList.remove('show'), 1800);
   loadHome();
+});
+
+// ---------------- تخصيص المظهر (اللون والزخرفة) ----------------
+const THEMES = {
+  rose:    { label:'وردي', roseDeep:'#B5677A', gold:'#C9A876' },
+  lavender:{ label:'بنفسجي', roseDeep:'#8B6BAE', gold:'#D8B4E2' },
+  sky:     { label:'سماوي', roseDeep:'#4F8FB8', gold:'#BFD9E8' },
+  sunset:  { label:'غروب', roseDeep:'#C96A3E', gold:'#F0C48A' },
+  emerald: { label:'زمردي', roseDeep:'#4E9271', gold:'#C9D9A8' },
+  gold:    { label:'ذهبي', roseDeep:'#A9823F', gold:'#EAD6A0' }
+};
+const DECORATIONS = {
+  petals: { label:'ورد متطاير', emoji:'🌸' },
+  hearts: { label:'قلوب', emoji:'❤️' },
+  stars:  { label:'نجوم', emoji:'✨' },
+  snow:   { label:'ثلج', emoji:'❄️' }
+};
+
+let selectedTheme = 'rose';
+let selectedDecoration = 'petals';
+
+function renderThemeSwatches(){
+  const wrap = document.getElementById('themeSwatches');
+  wrap.innerHTML = '';
+  Object.entries(THEMES).forEach(([key, t]) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'theme-swatch' + (key === selectedTheme ? ' selected' : '');
+    btn.innerHTML = `<span class="swatch-circle" style="background:linear-gradient(135deg, ${t.roseDeep}, ${t.gold})"></span><span class="swatch-label">${t.label}</span>`;
+    btn.addEventListener('click', () => { selectedTheme = key; renderThemeSwatches(); });
+    wrap.appendChild(btn);
+  });
+}
+
+function renderDecorationOptions(){
+  const wrap = document.getElementById('decorationOptions');
+  wrap.innerHTML = '';
+  Object.entries(DECORATIONS).forEach(([key, d]) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'decoration-option' + (key === selectedDecoration ? ' selected' : '');
+    btn.innerHTML = `<span class="deco-emoji">${d.emoji}</span><span class="swatch-label">${d.label}</span>`;
+    btn.addEventListener('click', () => { selectedDecoration = key; renderDecorationOptions(); });
+    wrap.appendChild(btn);
+  });
+}
+
+document.getElementById('saveThemeBtn').addEventListener('click', async () => {
+  await backend.saveSettings(currentGiftId, { themeKey: selectedTheme, decoration: selectedDecoration });
+  const status = document.getElementById('themeSaveStatus');
+  status.classList.add('show');
+  setTimeout(() => status.classList.remove('show'), 1800);
 });
 
 // ---------------- Helpers ----------------
