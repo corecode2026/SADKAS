@@ -228,13 +228,14 @@ button{font-family:inherit;cursor:pointer;}
 <div class="crop-modal hidden" id="cropModal">
   <div class="crop-modal-inner">
     <h3>اقتصاص الصورة</h3>
-    <div class="crop-modal-hint">اسحب الصورة لتحريكها، واستخدم شريط التكبير لضبط ما يظهر داخل الإطار</div>
+    <div class="crop-modal-hint">اسحب الصورة لتحريكها، واستخدم شريط التكبير لضبط ما يظهر داخل الإطار. حرّك الشريط لأقصى اليسار لرؤية الصورة كاملة.</div>
     <div class="crop-stage" id="cropStage">
       <img id="cropSourceImg" alt="">
     </div>
     <label class="crop-zoom-label">التكبير
       <input type="range" id="cropZoom" min="100" max="300" value="100">
     </label>
+    <button class="btn secondary sm" id="cropShowFullBtn" style="margin-bottom:14px;">إظهار الصورة كاملة</button>
     <div class="crop-modal-actions">
       <button class="btn secondary" id="cropCancelBtn">إلغاء</button>
       <button class="btn" id="cropConfirmBtn">تم القص</button>
@@ -852,13 +853,20 @@ function openCropModal(memory){
   img.onload = () => {
     cropState.naturalW = img.naturalWidth;
     cropState.naturalH = img.naturalHeight;
-    cropState.baseScale = Math.max(CROP_STAGE_W / cropState.naturalW, CROP_STAGE_H / cropState.naturalH);
-    cropState.zoom = 1;
-    cropState.scale = cropState.baseScale;
+    // containScale = أصغر تكبير تظهر فيه الصورة كاملة داخل الإطار (١٠٠٪ بشريط التكبير)
+    // coverScale = التكبير الذي يملأ الإطار بالكامل (نقطة البداية الافتراضية، كالسابق)
+    cropState.containScale = Math.min(CROP_STAGE_W / cropState.naturalW, CROP_STAGE_H / cropState.naturalH);
+    cropState.coverScale = Math.max(CROP_STAGE_W / cropState.naturalW, CROP_STAGE_H / cropState.naturalH);
+    const coverPercent = Math.round((cropState.coverScale / cropState.containScale) * 100);
+    const zoomSlider = document.getElementById('cropZoom');
+    zoomSlider.min = 100;
+    zoomSlider.max = Math.max(300, coverPercent * 2);
+    zoomSlider.value = coverPercent;
+    cropState.zoom = coverPercent / 100;
+    cropState.scale = cropState.containScale * cropState.zoom;
     const dispW = cropState.naturalW * cropState.scale, dispH = cropState.naturalH * cropState.scale;
     cropState.translateX = (CROP_STAGE_W - dispW) / 2;
     cropState.translateY = (CROP_STAGE_H - dispH) / 2;
-    document.getElementById('cropZoom').value = 100;
     applyCropTransform();
   };
   img.src = memory.url;
@@ -873,8 +881,16 @@ function applyCropTransform(){
 
 function clampCropTranslate(){
   const dispW = cropState.naturalW * cropState.scale, dispH = cropState.naturalH * cropState.scale;
-  cropState.translateX = Math.min(0, Math.max(CROP_STAGE_W - dispW, cropState.translateX));
-  cropState.translateY = Math.min(0, Math.max(CROP_STAGE_H - dispH, cropState.translateY));
+  if(dispW <= CROP_STAGE_W){
+    cropState.translateX = (CROP_STAGE_W - dispW) / 2; // مركّزة أفقيًا إذا كانت أضيق من الإطار (صورة كاملة)
+  } else {
+    cropState.translateX = Math.min(0, Math.max(CROP_STAGE_W - dispW, cropState.translateX));
+  }
+  if(dispH <= CROP_STAGE_H){
+    cropState.translateY = (CROP_STAGE_H - dispH) / 2;
+  } else {
+    cropState.translateY = Math.min(0, Math.max(CROP_STAGE_H - dispH, cropState.translateY));
+  }
 }
 
 const cropStageEl = document.getElementById('cropStage');
@@ -900,11 +916,22 @@ document.getElementById('cropZoom').addEventListener('input', (e) => {
   const oldScale = cropState.scale;
   const oldDispW = cropState.naturalW * oldScale, oldDispH = cropState.naturalH * oldScale;
   cropState.zoom = e.target.value / 100;
-  cropState.scale = cropState.baseScale * cropState.zoom;
+  cropState.scale = cropState.containScale * cropState.zoom;
   const newDispW = cropState.naturalW * cropState.scale, newDispH = cropState.naturalH * cropState.scale;
   cropState.translateX -= (newDispW - oldDispW) / 2;
   cropState.translateY -= (newDispH - oldDispH) / 2;
   clampCropTranslate();
+  applyCropTransform();
+});
+
+document.getElementById('cropShowFullBtn').addEventListener('click', () => {
+  if(!cropState) return;
+  cropState.zoom = 1; // ١٠٠٪ = الصورة كاملة بدون أي قص
+  cropState.scale = cropState.containScale;
+  document.getElementById('cropZoom').value = 100;
+  const dispW = cropState.naturalW * cropState.scale, dispH = cropState.naturalH * cropState.scale;
+  cropState.translateX = (CROP_STAGE_W - dispW) / 2;
+  cropState.translateY = (CROP_STAGE_H - dispH) / 2;
   applyCropTransform();
 });
 
