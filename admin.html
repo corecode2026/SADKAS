@@ -60,6 +60,9 @@ button{font-family:inherit;cursor:pointer;}
 .duration-field{display:flex;align-items:center;gap:6px;margin-top:4px;}
 .duration-field label{font-size:11.5px;color:var(--muted);white-space:nowrap;}
 .duration-field input{width:70px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);font-size:13px;background:#fff;}
+.fit-toggle{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
+.fit-toggle button{font-size:11px;padding:5px 9px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--muted);}
+.fit-toggle button.active{background:var(--rose-deep);color:#fff;border-color:var(--rose-deep);}
 .item-thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;background:#eee;flex-shrink:0;}
 .item-thumb.video-thumb,.item-thumb.audio-thumb{display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--muted);}
 .item-body{flex:1;min-width:0;}
@@ -788,8 +791,10 @@ async function loadImages(){
   if(!docs.length){ list.innerHTML = '<div class="empty-hint">لم تُضَف صور بعد</div>'; return; }
   docs.forEach((m) => {
     const duration = m.duration != null ? m.duration : 4;
+    const fit = m.fit === 'contain' ? 'contain' : 'cover';
     const row = document.createElement('div');
     row.className = 'item-row';
+    row.dataset.fit = fit;
     row.innerHTML = `
       <img class="item-thumb" src="${m.url}">
       <div class="item-body">
@@ -799,6 +804,10 @@ async function loadImages(){
           <label>مدة العرض (ثانية)</label>
           <input type="number" min="1" max="30" step="0.5" value="${duration}" data-field="duration">
         </div>
+        <div class="fit-toggle">
+          <button type="button" data-fit="cover" class="${fit==='cover'?'active':''}">🔲 ملء الإطار</button>
+          <button type="button" data-fit="contain" class="${fit==='contain'?'active':''}">🖼️ الصورة كاملة (بلا قص)</button>
+        </div>
       </div>
       <div class="item-actions">
         <button data-act="crop" title="قص الصورة">✂️</button>
@@ -807,6 +816,12 @@ async function loadImages(){
         <button data-act="save" title="حفظ">💾</button>
         <button data-act="del" title="حذف">🗑️</button>
       </div>`;
+    row.querySelectorAll('[data-fit]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        row.dataset.fit = btn.getAttribute('data-fit');
+        row.querySelectorAll('[data-fit]').forEach(b => b.classList.toggle('active', b === btn));
+      });
+    });
     row.querySelector('[data-act="crop"]').addEventListener('click', () => openCropModal(m));
     row.querySelector('[data-act="up"]').addEventListener('click', async () => { await backend.swapMemoryOrder(currentGiftId,'image', m.id, -1); loadImages(); });
     row.querySelector('[data-act="down"]').addEventListener('click', async () => { await backend.swapMemoryOrder(currentGiftId,'image', m.id, 1); loadImages(); });
@@ -814,7 +829,8 @@ async function loadImages(){
       await backend.updateMemory(currentGiftId, m.id, {
         caption: row.querySelector('[data-field="caption"]').value,
         date: row.querySelector('[data-field="date"]').value,
-        duration: parseFloat(row.querySelector('[data-field="duration"]').value) || 4
+        duration: parseFloat(row.querySelector('[data-field="duration"]').value) || 4,
+        fit: row.dataset.fit
       });
       flashSaved(row);
     });
