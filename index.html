@@ -12,6 +12,8 @@
   --rose:#D88C9A; --rose-deep:#B5677A; --gold:#C9A876; --white:#FFFFFF;
   --shadow:0 20px 50px -20px rgba(74,46,53,.35);
   --radius-lg:28px; --radius-md:18px; --ease:cubic-bezier(.22,.61,.36,1);
+  --lock-grad-1:rgba(216,140,154,.55); --lock-grad-2:rgba(201,168,118,.4);
+  --lock-grad-base:linear-gradient(160deg,#4A2E35 0%,#6B3C46 45%,#8C5A63 100%);
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--ink);font-family:'Cairo',sans-serif;overflow-x:hidden;}
@@ -28,9 +30,9 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;}
 
 #lock-screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:100;overflow:hidden;}
 .lock-bg{position:absolute;inset:0;background:
-  radial-gradient(circle at 20% 15%, rgba(216,140,154,.55), transparent 55%),
-  radial-gradient(circle at 85% 80%, rgba(201,168,118,.4), transparent 50%),
-  linear-gradient(160deg,#4A2E35 0%,#6B3C46 45%,#8C5A63 100%);}
+  radial-gradient(circle at 20% 15%, var(--lock-grad-1), transparent 55%),
+  radial-gradient(circle at 85% 80%, var(--lock-grad-2), transparent 50%),
+  var(--lock-grad-base);}
 .lock-content{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;color:var(--white);padding:24px;width:100%;max-width:360px;text-align:center;transition:opacity .5s var(--ease),transform .5s var(--ease),filter .5s var(--ease);}
 .lock-heart{font-size:34px;margin-bottom:6px;animation:pulse 2.4s ease-in-out infinite;filter:drop-shadow(0 4px 10px rgba(0,0,0,.25));}
 @keyframes pulse{0%,100%{transform:scale(1);opacity:.92;}50%{transform:scale(1.12);opacity:1;}}
@@ -70,7 +72,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;}
 #page-memories{position:relative;overflow:hidden;}
 #page-memories h2{position:relative;z-index:1;font-size:clamp(26px,5vw,36px);color:var(--rose-deep);margin-bottom:28px;}
 .petals-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:0;}
-.petal-fall{position:absolute;top:-8%;border-radius:50% 0 50% 50%;opacity:0;animation:petalFall linear infinite;}
+.petal-fall{position:absolute;top:-8%;opacity:0;line-height:1;animation:petalFall linear infinite;}
 @keyframes petalFall{
   0%{transform:translate(0,0) rotate(0deg);opacity:0;}
   8%{opacity:.75;}
@@ -244,6 +246,36 @@ if(!FirebaseBackend){
   modeBadge.classList.remove('hidden');
 }
 
+// ---------------- ثيمات الألوان ----------------
+const THEMES = {
+  rose:    { rose:'#D88C9A', roseDeep:'#B5677A', gold:'#C9A876', bg:'#FBF3F0', bgAlt:'#F5E4E1', lock1:'rgba(216,140,154,.55)', lock2:'rgba(201,168,118,.4)', lockBase:'linear-gradient(160deg,#4A2E35 0%,#6B3C46 45%,#8C5A63 100%)' },
+  lavender:{ rose:'#B79FD1', roseDeep:'#8B6BAE', gold:'#D8B4E2', bg:'#F6F2FB', bgAlt:'#ECE3F7', lock1:'rgba(183,159,209,.55)', lock2:'rgba(216,180,226,.4)', lockBase:'linear-gradient(160deg,#3B2E52 0%,#5C4577 45%,#8368A6 100%)' },
+  sky:     { rose:'#8FC1DE', roseDeep:'#4F8FB8', gold:'#BFD9E8', bg:'#F1F8FC', bgAlt:'#E3F1F8', lock1:'rgba(143,193,222,.55)', lock2:'rgba(191,217,232,.4)', lockBase:'linear-gradient(160deg,#1F3B4D 0%,#2E5C73 45%,#4A87A3 100%)' },
+  sunset:  { rose:'#E8916B', roseDeep:'#C96A3E', gold:'#F0C48A', bg:'#FDF3EC', bgAlt:'#FBE6D8', lock1:'rgba(232,145,107,.55)', lock2:'rgba(240,196,138,.4)', lockBase:'linear-gradient(160deg,#4A2A1E 0%,#7A3F26 45%,#B25A34 100%)' },
+  emerald: { rose:'#7FB89A', roseDeep:'#4E9271', gold:'#C9D9A8', bg:'#F1F8F4', bgAlt:'#E2F0E8', lock1:'rgba(127,184,154,.55)', lock2:'rgba(201,217,168,.4)', lockBase:'linear-gradient(160deg,#1E3B2E 0%,#2E5C45 45%,#4A8A69 100%)' },
+  gold:    { rose:'#D4AF6A', roseDeep:'#A9823F', gold:'#EAD6A0', bg:'#FBF7EE', bgAlt:'#F3E9D2', lock1:'rgba(212,175,106,.55)', lock2:'rgba(234,214,160,.4)', lockBase:'linear-gradient(160deg,#3E2E14 0%,#5C4520 45%,#8A6A34 100%)' }
+};
+
+function applyTheme(themeKey){
+  const t = THEMES[themeKey] || THEMES.rose;
+  const root = document.documentElement.style;
+  root.setProperty('--rose', t.rose);
+  root.setProperty('--rose-deep', t.roseDeep);
+  root.setProperty('--gold', t.gold);
+  root.setProperty('--bg', t.bg);
+  root.setProperty('--bg-alt', t.bgAlt);
+  root.setProperty('--lock-grad-1', t.lock1);
+  root.setProperty('--lock-grad-2', t.lock2);
+  root.setProperty('--lock-grad-base', t.lockBase);
+}
+
+const DECORATION_EMOJI = {
+  petals: ['🌸','🌺'],
+  hearts: ['❤️','💕'],
+  stars: ['✨','⭐'],
+  snow: ['❄️','❆']
+};
+
 // ============================================================
 // منطق الموقع
 // ============================================================
@@ -416,30 +448,30 @@ function startMessageScroll(){
 function goToMemories(){
   document.getElementById('page-message').classList.remove('active');
   document.getElementById('page-memories').classList.add('active');
-  spawnFallingPetals();
+  spawnFallingPetals(GIFT_SETTINGS.decoration || 'petals');
   startSlideshow();
 }
 
-function spawnFallingPetals(){
+function spawnFallingPetals(decorationType){
   const bg = document.getElementById('petalsBg');
   if(!bg || bg.dataset.spawned) return;
   bg.dataset.spawned = '1';
+  const emojis = DECORATION_EMOJI[decorationType] || DECORATION_EMOJI.petals;
   const count = 16;
   for(let i=0;i<count;i++){
     const p = document.createElement('div');
     p.className = 'petal-fall';
-    const size = 10 + Math.random()*9;
+    p.textContent = emojis[i % emojis.length];
+    const size = 16 + Math.random()*10;
     const left = Math.random()*100;
     const duration = 9 + Math.random()*7;
     const delay = -Math.random()*duration;
     const drift = (Math.random()*100 - 50) + 'px';
     p.style.left = left + '%';
-    p.style.width = size + 'px';
-    p.style.height = size + 'px';
+    p.style.fontSize = size + 'px';
     p.style.animationDuration = duration + 's';
     p.style.animationDelay = delay + 's';
     p.style.setProperty('--drift', drift);
-    p.style.background = i % 2 === 0 ? 'var(--rose)' : 'var(--gold)';
     bg.appendChild(p);
   }
 }
@@ -628,6 +660,7 @@ async function init(){
     GIFT_SETTINGS = { password:'1234' };
   }
   renderDots();
+  applyTheme(GIFT_SETTINGS.themeKey || 'rose');
   applySettingsToContent();
   document.getElementById('nextBtn').addEventListener('click', goToMemories);
   loadMusic();
