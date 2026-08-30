@@ -69,6 +69,12 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;}
 .scroll-hint{position:relative;z-index:1;font-size:12px;color:var(--muted);margin-bottom:26px;opacity:.75;}
 .btn-next{background:var(--rose-deep);color:var(--white);padding:14px 38px;border-radius:999px;font-size:16px;font-weight:600;box-shadow:var(--shadow);transition:transform .2s var(--ease),box-shadow .2s var(--ease);}
 .btn-next:hover{transform:translateY(-2px);box-shadow:0 24px 55px -18px rgba(74,46,53,.45);}
+.question-card{position:relative;width:100%;max-width:480px;min-height:260px;background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:44px 30px 30px;text-align:center;}
+#questionText{font-size:clamp(20px,4.5vw,26px);color:var(--rose-deep);margin:14px 0 8px;line-height:1.7;min-height:70px;}
+.question-buttons{position:relative;height:130px;margin-top:20px;}
+.btn-yes{position:absolute;left:50%;top:50%;transform:translate(-90%,-50%);background:var(--rose-deep);color:#fff;padding:13px 30px;border-radius:999px;font-size:15px;font-weight:600;box-shadow:var(--shadow);z-index:2;transition:transform .15s var(--ease);}
+.btn-yes:hover{transform:translate(-90%,-52%);}
+.btn-no{position:absolute;left:65%;top:50%;transform:translate(-10%,-50%);background:#F1E4E1;color:var(--rose-deep);padding:13px 30px;border-radius:999px;font-size:15px;font-weight:600;transition:left .2s var(--ease), top .2s var(--ease);}
 #page-memories{position:relative;overflow:hidden;}
 #page-memories h2{position:relative;z-index:1;font-size:clamp(26px,5vw,36px);color:var(--rose-deep);margin-bottom:28px;}
 .petals-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:0;}
@@ -120,6 +126,17 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;}
     </div>
     <div class="scroll-hint">المس النص لإيقافه والقراءة بهدوء</div>
     <button class="btn-next" id="nextBtn"></button>
+  </section>
+
+  <section id="page-questions" class="page">
+    <div class="question-card">
+      <div class="eyebrow">سؤال صغير 🤭</div>
+      <h2 id="questionText"></h2>
+      <div class="question-buttons" id="questionButtons">
+        <button class="btn-yes" id="questionYesBtn">نعم ❤️</button>
+        <button class="btn-no" id="questionNoBtn">لا</button>
+      </div>
+    </div>
   </section>
 
   <section id="page-memories" class="page">
@@ -189,6 +206,9 @@ const LocalBackend = {
   },
   async listSongs(giftId){
     return lsGet(localKey(giftId,'songs'), []).sort((a,b) => a.order - b.order);
+  },
+  async listQuestions(giftId){
+    return lsGet(localKey(giftId,'questions'), []).sort((a,b) => a.order - b.order);
   }
 };
 
@@ -233,6 +253,10 @@ if(IS_FIREBASE_CONFIGURED){
       async listSongs(giftId){
         const snap = await db.ref(gpath(giftId,'songs')).once('value');
         return withResolvedUrl(objToSortedArray(snap.val()));
+      },
+      async listQuestions(giftId){
+        const snap = await db.ref(gpath(giftId,'questions')).once('value');
+        return objToSortedArray(snap.val());
       }
     };
   } catch(e){ console.error('Firebase init failed, falling back to local mode:', e); }
@@ -256,8 +280,8 @@ const THEMES = {
   gold:    { rose:'#D4AF6A', roseDeep:'#A9823F', gold:'#EAD6A0', bg:'#FBF7EE', bgAlt:'#F3E9D2', lock1:'rgba(212,175,106,.55)', lock2:'rgba(234,214,160,.4)', lockBase:'linear-gradient(160deg,#3E2E14 0%,#5C4520 45%,#8A6A34 100%)' }
 };
 
-function applyTheme(themeKey){
-  const t = THEMES[themeKey] || THEMES.rose;
+function applyTheme(themeKey, customColor){
+  const t = (themeKey === 'custom' && customColor) ? deriveThemeFromColor(customColor) : (THEMES[themeKey] || THEMES.rose);
   const root = document.documentElement.style;
   root.setProperty('--rose', t.rose);
   root.setProperty('--rose-deep', t.roseDeep);
@@ -267,6 +291,54 @@ function applyTheme(themeKey){
   root.setProperty('--lock-grad-1', t.lock1);
   root.setProperty('--lock-grad-2', t.lock2);
   root.setProperty('--lock-grad-base', t.lockBase);
+}
+
+// ---------------- توليد لوحة ألوان كاملة من لون واحد يختاره المستخدم ----------------
+function hexToHsl(hex){
+  hex = hex.replace('#','');
+  const r = parseInt(hex.substr(0,2),16)/255, g = parseInt(hex.substr(2,2),16)/255, b = parseInt(hex.substr(4,2),16)/255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b);
+  let h, s, l = (max+min)/2;
+  if(max === min){ h = s = 0; }
+  else{
+    const d = max-min;
+    s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+    switch(max){
+      case r: h = (g-b)/d + (g<b?6:0); break;
+      case g: h = (b-r)/d + 2; break;
+      default: h = (r-g)/d + 4;
+    }
+    h /= 6;
+  }
+  return { h: h*360, s: s*100, l: l*100 };
+}
+function hslToHex(h,s,l){
+  h = ((h%360)+360)%360; h/=360; s/=100; l/=100;
+  let r,g,b;
+  if(s === 0){ r=g=b=l; }
+  else{
+    const hue2rgb = (p,q,t) => { if(t<0) t+=1; if(t>1) t-=1; if(t<1/6) return p+(q-p)*6*t; if(t<1/2) return q; if(t<2/3) return p+(q-p)*(2/3-t)*6; return p; };
+    const q = l<0.5 ? l*(1+s) : l+s-l*s;
+    const p = 2*l-q;
+    r = hue2rgb(p,q,h+1/3); g = hue2rgb(p,q,h); b = hue2rgb(p,q,h-1/3);
+  }
+  const toHex = x => Math.round(x*255).toString(16).padStart(2,'0');
+  return '#'+toHex(r)+toHex(g)+toHex(b);
+}
+function deriveThemeFromColor(hex){
+  const { h, s, l } = hexToHsl(hex);
+  const roseDeep = hex;
+  const rose = hslToHex(h, Math.max(s-8,20), Math.min(l+18,82));
+  const gold = hslToHex((h+35)%360, Math.max(s-15,25), Math.min(l+28,86));
+  const bg = hslToHex(h, Math.min(s*0.25,22), 96);
+  const bgAlt = hslToHex(h, Math.min(s*0.3,28), 91);
+  const lock1 = `hsla(${Math.round(h)}, ${Math.round(Math.min(s,70))}%, ${Math.round(Math.min(l+15,68))}%, .55)`;
+  const lock2 = `hsla(${Math.round((h+35)%360)}, ${Math.round(Math.min(s,65))}%, ${Math.round(Math.min(l+25,72))}%, .4)`;
+  const dark1 = hslToHex(h, Math.min(s+10,60), Math.max(l-38,10));
+  const dark2 = hslToHex(h, Math.min(s+5,55), Math.max(l-22,22));
+  const dark3 = hslToHex(h, Math.max(s-5,35), Math.max(l-6,32));
+  const lockBase = `linear-gradient(160deg, ${dark1} 0%, ${dark2} 45%, ${dark3} 100%)`;
+  return { rose, roseDeep, gold, bg, bgAlt, lock1, lock2, lockBase };
 }
 
 const DECORATION_EMOJI = {
@@ -445,12 +517,64 @@ function startMessageScroll(){
   });
 }
 
-function goToMemories(){
+function proceedToMemories(){
   document.getElementById('page-message').classList.remove('active');
+  document.getElementById('page-questions').classList.remove('active');
   document.getElementById('page-memories').classList.add('active');
   spawnFallingPetals(GIFT_SETTINGS.decoration || 'petals');
   startSlideshow();
 }
+
+let currentQuestions = [];
+let currentQuestionIndex = 0;
+
+function handleNextFromMessage(){
+  document.getElementById('page-message').classList.remove('active');
+  if(currentQuestions && currentQuestions.length){
+    currentQuestionIndex = 0;
+    document.getElementById('page-questions').classList.add('active');
+    showCurrentQuestion();
+  } else {
+    proceedToMemories();
+  }
+}
+
+function showCurrentQuestion(){
+  if(currentQuestionIndex >= currentQuestions.length){
+    document.getElementById('page-questions').classList.remove('active');
+    proceedToMemories();
+    return;
+  }
+  document.getElementById('questionText').textContent = currentQuestions[currentQuestionIndex].text;
+  resetNoButtonPosition();
+}
+
+function resetNoButtonPosition(){
+  const noBtn = document.getElementById('questionNoBtn');
+  noBtn.style.left = '65%';
+  noBtn.style.top = '50%';
+  noBtn.style.transform = 'translate(-10%,-50%)';
+}
+
+function dodgeNoButton(){
+  const container = document.getElementById('questionButtons');
+  const noBtn = document.getElementById('questionNoBtn');
+  const w = noBtn.offsetWidth || 90, h = noBtn.offsetHeight || 44;
+  const maxLeft = Math.max(container.clientWidth - w - 10, 10);
+  const maxTop = Math.max(container.clientHeight - h - 10, 10);
+  const newLeft = 10 + Math.random() * maxLeft;
+  const newTop = 10 + Math.random() * maxTop;
+  noBtn.style.transform = 'none';
+  noBtn.style.left = newLeft + 'px';
+  noBtn.style.top = newTop + 'px';
+}
+
+document.getElementById('questionNoBtn').addEventListener('pointerenter', dodgeNoButton);
+document.getElementById('questionNoBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); dodgeNoButton(); });
+document.getElementById('questionYesBtn').addEventListener('click', () => {
+  currentQuestionIndex++;
+  showCurrentQuestion();
+});
 
 function spawnFallingPetals(decorationType){
   const bg = document.getElementById('petalsBg');
@@ -663,9 +787,10 @@ async function init(){
     GIFT_SETTINGS = { password:'1234' };
   }
   renderDots();
-  applyTheme(GIFT_SETTINGS.themeKey || 'rose');
+  applyTheme(GIFT_SETTINGS.themeKey || 'rose', GIFT_SETTINGS.customColor);
   applySettingsToContent();
-  document.getElementById('nextBtn').addEventListener('click', goToMemories);
+  try{ currentQuestions = await backend.listQuestions(GIFT_ID); } catch(e){ currentQuestions = []; }
+  document.getElementById('nextBtn').addEventListener('click', handleNextFromMessage);
   loadMusic();
 }
 
