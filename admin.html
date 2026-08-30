@@ -146,6 +146,7 @@ button{font-family:inherit;cursor:pointer;}
     <button class="nav-item" data-view="images">📷 الصور</button>
     <button class="nav-item" data-view="videos">🎥 الفيديوهات</button>
     <button class="nav-item" data-view="songs">🎵 الأغاني</button>
+    <button class="nav-item" data-view="questions">❓ أسئلة نعم/لا</button>
     <a class="nav-item" id="previewSiteLink" href="index.html" target="_blank" style="text-decoration:none;display:block;text-align:right;">👁️ معاينة الموقع</a>
     <button class="logout" id="logoutBtn">تسجيل الخروج</button>
   </aside>
@@ -184,6 +185,7 @@ button{font-family:inherit;cursor:pointer;}
         <div class="field">
           <label>لون الموقع</label>
           <div class="theme-swatches" id="themeSwatches"></div>
+          <input type="color" id="customColorInput" class="hidden" value="#D88C9A">
         </div>
         <div class="field">
           <label>الزخرفة المتطايرة بصفحة الذكريات</label>
@@ -218,6 +220,18 @@ button{font-family:inherit;cursor:pointer;}
         <div class="upload-row"><input type="file" id="songInput" accept="audio/mpeg,audio/*"><button class="btn" id="uploadSongBtn">+ إضافة أغنية</button></div>
         <div class="progress-bar hidden" id="songProgressWrap"><div id="songProgressBar"></div></div>
         <div class="item-list" id="songsList"></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-questions">
+      <h1>أسئلة نعم/لا الممتعة</h1>
+      <div class="panel">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">أضف حتى ٣ أسئلة تظهر بعد الرسالة مباشرة وقبل الصور. جواب "لا" يهرب من الماوس أو الإصبع تلقائيًا 😄 — ما فيه طريقة تضغطه!</p>
+        <div class="upload-row" id="addQuestionRow">
+          <input type="text" id="newQuestionInput" placeholder="اكتب سؤالك (مثلاً: بتحبيني؟)" style="flex:1;min-width:180px;padding:10px 14px;border-radius:10px;border:1px solid var(--line);font-size:14px;">
+          <button class="btn" id="addQuestionBtn">+ إضافة سؤال</button>
+        </div>
+        <div class="item-list" id="questionsList"></div>
       </div>
     </div>
   </main>
@@ -373,6 +387,31 @@ const LocalBackend = {
   async setDefaultSong(giftId, id){
     const all = lsGet(localKey(giftId,'songs'), []).map(s => ({ ...s, isDefault: s.id === id }));
     lsSet(localKey(giftId,'songs'), all);
+  },
+  async listQuestions(giftId){ return lsGet(localKey(giftId,'questions'), []).sort((a,b)=>a.order-b.order); },
+  async addQuestion(giftId, text){
+    const all = lsGet(localKey(giftId,'questions'), []);
+    if(all.length >= 3) throw new Error('MAX_QUESTIONS');
+    const maxOrder = all.length ? Math.max(...all.map(q=>q.order)) : -1;
+    all.push({ id: genId(), text, order: maxOrder+1 });
+    lsSet(localKey(giftId,'questions'), all);
+  },
+  async updateQuestion(giftId, id, fields){
+    const all = lsGet(localKey(giftId,'questions'), []);
+    const idx = all.findIndex(q => q.id === id);
+    if(idx>-1){ all[idx] = { ...all[idx], ...fields }; lsSet(localKey(giftId,'questions'), all); }
+  },
+  async deleteQuestion(giftId, id){
+    const all = lsGet(localKey(giftId,'questions'), []).filter(q => q.id !== id);
+    lsSet(localKey(giftId,'questions'), all);
+  },
+  async swapQuestionOrder(giftId, id, direction){
+    const all = lsGet(localKey(giftId,'questions'), []).sort((a,b)=>a.order-b.order);
+    const idx = all.findIndex(q => q.id === id);
+    const otherIdx = idx + direction;
+    if(otherIdx < 0 || otherIdx >= all.length) return;
+    const tmp = all[idx].order; all[idx].order = all[otherIdx].order; all[otherIdx].order = tmp;
+    lsSet(localKey(giftId,'questions'), all);
   }
 };
 
@@ -489,6 +528,30 @@ if(IS_FIREBASE_CONFIGURED){
         const val = snap.val() || {};
         const updates = {};
         Object.keys(val).forEach(sid => { updates[gpath(giftId,'songs')+'/'+sid+'/isDefault'] = (sid === id); });
+        await db.ref().update(updates);
+      },
+      async listQuestions(giftId){
+        const snap = await db.ref(gpath(giftId,'questions')).once('value');
+        return objToSortedArray(snap.val());
+      },
+      async addQuestion(giftId, text){
+        const existing = objToSortedArray((await db.ref(gpath(giftId,'questions')).once('value')).val());
+        if(existing.length >= 3) throw new Error('MAX_QUESTIONS');
+        const order = existing.length ? existing[existing.length-1].order + 1 : 0;
+        const newRef = db.ref(gpath(giftId,'questions')).push();
+        await newRef.set({ text, order });
+      },
+      async updateQuestion(giftId, id, fields){ await db.ref(gpath(giftId,'questions')+'/'+id).update(fields); },
+      async deleteQuestion(giftId, id){ await db.ref(gpath(giftId,'questions')+'/'+id).remove(); },
+      async swapQuestionOrder(giftId, id, direction){
+        const list = objToSortedArray((await db.ref(gpath(giftId,'questions')).once('value')).val());
+        const idx = list.findIndex(q => q.id === id);
+        const otherIdx = idx + direction;
+        if(otherIdx < 0 || otherIdx >= list.length) return;
+        const a = list[idx], b = list[otherIdx];
+        const updates = {};
+        updates[gpath(giftId,'questions')+'/'+a.id+'/order'] = b.order;
+        updates[gpath(giftId,'questions')+'/'+b.id+'/order'] = a.order;
         await db.ref().update(updates);
       }
     };
@@ -632,7 +695,7 @@ function openGiftDashboard(giftId, label){
   document.getElementById('view-home').classList.add('active');
   document.querySelectorAll('.nav-item[data-view]').forEach(n => n.classList.remove('active'));
   document.querySelectorAll('.nav-item[data-view="home"]').forEach(n => n.classList.add('active'));
-  loadHome(); loadSettingsForm(); loadImages(); loadVideos(); loadSongs();
+  loadHome(); loadSettingsForm(); loadImages(); loadVideos(); loadSongs(); loadQuestions();
 }
 
 document.getElementById('backToGiftsBtn').addEventListener('click', showGiftsScreen);
@@ -670,6 +733,8 @@ async function loadSettingsForm(){
   document.getElementById('fBtnText').value = s.buttonText || '';
   selectedTheme = s.themeKey || 'rose';
   selectedDecoration = s.decoration || 'petals';
+  selectedCustomColor = s.customColor || '#D88C9A';
+  document.getElementById('customColorInput').value = selectedCustomColor;
   renderThemeSwatches();
   renderDecorationOptions();
 }
@@ -705,6 +770,7 @@ const DECORATIONS = {
 
 let selectedTheme = 'rose';
 let selectedDecoration = 'petals';
+let selectedCustomColor = '#D88C9A';
 
 function renderThemeSwatches(){
   const wrap = document.getElementById('themeSwatches');
@@ -717,7 +783,19 @@ function renderThemeSwatches(){
     btn.addEventListener('click', () => { selectedTheme = key; renderThemeSwatches(); });
     wrap.appendChild(btn);
   });
+  const customBtn = document.createElement('button');
+  customBtn.type = 'button';
+  customBtn.className = 'theme-swatch' + (selectedTheme === 'custom' ? ' selected' : '');
+  customBtn.innerHTML = `<span class="swatch-circle" style="background:${selectedCustomColor};display:flex;align-items:center;justify-content:center;font-size:14px;">🎨</span><span class="swatch-label">لون مخصص</span>`;
+  customBtn.addEventListener('click', () => { document.getElementById('customColorInput').click(); });
+  wrap.appendChild(customBtn);
 }
+
+document.getElementById('customColorInput').addEventListener('input', (e) => {
+  selectedTheme = 'custom';
+  selectedCustomColor = e.target.value;
+  renderThemeSwatches();
+});
 
 function renderDecorationOptions(){
   const wrap = document.getElementById('decorationOptions');
@@ -733,7 +811,7 @@ function renderDecorationOptions(){
 }
 
 document.getElementById('saveThemeBtn').addEventListener('click', async () => {
-  await backend.saveSettings(currentGiftId, { themeKey: selectedTheme, decoration: selectedDecoration });
+  await backend.saveSettings(currentGiftId, { themeKey: selectedTheme, decoration: selectedDecoration, customColor: selectedCustomColor });
   const status = document.getElementById('themeSaveStatus');
   status.classList.add('show');
   setTimeout(() => status.classList.remove('show'), 1800);
@@ -1056,6 +1134,53 @@ async function loadSongs(){
     list.appendChild(row);
   });
 }
+
+// ---------------- Questions (نعم/لا) ----------------
+async function loadQuestions(){
+  const list = document.getElementById('questionsList');
+  const docs = await backend.listQuestions(currentGiftId);
+  document.getElementById('addQuestionRow').style.display = docs.length >= 3 ? 'none' : 'flex';
+  list.innerHTML = '';
+  if(!docs.length){ list.innerHTML = '<div class="empty-hint">لم تُضَف أسئلة بعد (اختياري)</div>'; return; }
+  docs.forEach((q) => {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `
+      <div class="item-body">
+        <input type="text" value="${escapeAttr(q.text)}" data-field="text">
+      </div>
+      <div class="item-actions">
+        <button data-act="up" title="تحريك لأعلى">↑</button>
+        <button data-act="down" title="تحريك لأسفل">↓</button>
+        <button data-act="save" title="حفظ">💾</button>
+        <button data-act="del" title="حذف">🗑️</button>
+      </div>`;
+    row.querySelector('[data-act="up"]').addEventListener('click', async () => { await backend.swapQuestionOrder(currentGiftId, q.id, -1); loadQuestions(); });
+    row.querySelector('[data-act="down"]').addEventListener('click', async () => { await backend.swapQuestionOrder(currentGiftId, q.id, 1); loadQuestions(); });
+    row.querySelector('[data-act="save"]').addEventListener('click', async () => {
+      await backend.updateQuestion(currentGiftId, q.id, { text: row.querySelector('[data-field="text"]').value });
+      flashSaved(row);
+    });
+    row.querySelector('[data-act="del"]').addEventListener('click', async () => {
+      if(confirm('حذف هذا السؤال؟')){ await backend.deleteQuestion(currentGiftId, q.id); loadQuestions(); }
+    });
+    list.appendChild(row);
+  });
+}
+
+document.getElementById('addQuestionBtn').addEventListener('click', async () => {
+  const input = document.getElementById('newQuestionInput');
+  const text = input.value.trim();
+  if(!text) return;
+  try{
+    await backend.addQuestion(currentGiftId, text);
+    input.value = '';
+    loadQuestions();
+  } catch(e){
+    if(e.message === 'MAX_QUESTIONS') alert('الحد الأقصى ٣ أسئلة فقط.');
+    else { console.error(e); alert('حدث خطأ، حاول مجددًا.'); }
+  }
+});
 
 initLogin();
 </script>
